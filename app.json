@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Canada 24/7",
-    "slug": "canada-247",
+    "name": "Canada 247",
+    "slug": "canada247",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -10,7 +10,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#1976D2"
+      "backgroundColor": "#FFFFFF"
     },
     "ios": {
       "supportsTablet": true
@@ -22,7 +22,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.canada247"
+      "package": "com.anonymous.canadainrealtime"
     },
     "web": {
       "favicon": "./assets/favicon.png"

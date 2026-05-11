@@ -4,10 +4,11 @@ import {
   Animated, Dimensions, Image, ScrollView,
 } from 'react-native';
 
-const APP_LOGO = require('../../assets/icon.png');
+const CANADA247_LOGO = require('../../assets/canada247-logo.jpg');
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { ENABLE_MANAGE_REGIONS } from '../config/features';
 import { useApp } from '../context/AppContext';
 import type { RootStackParamList } from '../navigation/types';
 
@@ -21,15 +22,17 @@ interface SidebarProps {
 }
 
 const NAV_ITEMS = [
-  { icon: 'near-me' as const, label: 'Manage My Regions', screen: 'ManageRegions' },
   { icon: 'notifications' as const, label: 'Manage My Alerts', screen: 'AlertSetup' },
   { icon: 'settings' as const, label: 'Settings', screen: 'Settings' },
-];
+].filter(item => ENABLE_MANAGE_REGIONS || item.screen !== 'ManageRegions');
 
 const EXTERNAL_LINKS: { label: string; icon: keyof typeof MaterialIcons.glyphMap; section: string }[] = [
-  { label: 'Canada 24/7 Gem',       icon: 'movie',         section: 'Entertainment' },
-  { label: 'Canada 24/7 Listen',    icon: 'headphones',    section: 'Arts' },
+  { label: 'Opportunities',         icon: 'work',          section: 'Opportunities' },
+  { label: 'Immigration',           icon: 'flight-land',   section: 'Immigration' },
+  { label: 'Education in Canada',   icon: 'school',        section: 'Education in Canada' },
+  { label: 'Events Across Canada',  icon: 'event',         section: 'Events' },
   { label: 'Canada 24/7 Sports',    icon: 'sports',        section: 'Sports' },
+  { label: 'Entertainment',         icon: 'movie',         section: 'Entertainment' },
   { label: 'Canada International',  icon: 'language',      section: 'World' },
 ];
 
@@ -50,24 +53,22 @@ export default function Sidebar({ visible, onClose, onNavigate }: SidebarProps) 
 
       {/* Drawer */}
       <View style={[styles.drawer, { backgroundColor: colors.surface, width: DRAWER_WIDTH }]}>
-        {/* Header image */}
-        <View style={styles.headerImage}>
-          <Image
-            source={{ uri: 'https://images.unsplash.com/photo-1585771724684-38269d6639fd?w=400' }}
-            style={StyleSheet.absoluteFillObject}
-            resizeMode="cover"
-          />
-          <View style={styles.headerOverlay} />
-          <View style={styles.headerContent}>
-            <Text style={styles.headerDesc}>Latest News from Across Canada</Text>
-            <Text style={styles.headerBody}>Updates on major national stories and international events.</Text>
-            <View style={styles.logoRow}>
-              <View style={[styles.logoBox, { backgroundColor: '#F5F5F5', borderColor: '#000' }]}>
-                <Image source={APP_LOGO} style={{ width: 44, height: 44 }} resizeMode="contain" />
-              </View>
-              <Text style={styles.appName}>Canada 24/7</Text>
+        {/* Canada247 logo banner */}
+        <View style={styles.logoBanner}>
+          <View style={styles.bannerTopBar} />
+          <View style={styles.bannerBody}>
+            <Image
+              source={CANADA247_LOGO}
+              style={styles.bannerLogo}
+              resizeMode="contain"
+            />
+          </View>
+          <View style={styles.sloganRow}>
+            <View style={styles.sloganPill}>
+              <Text style={styles.sloganText}>CANADA IN REAL TIME</Text>
             </View>
           </View>
+          <View style={styles.bannerBottomBar} />
         </View>
 
         <ScrollView>
@@ -90,7 +91,7 @@ export default function Sidebar({ visible, onClose, onNavigate }: SidebarProps) 
           {/* More from */}
           <View style={styles.morePadding}>
             <Text style={[styles.moreLabel, { color: colors.secondaryText }]}>
-              MORE FROM CANADA 24/7
+              EXPLORE CANADA IN REAL TIME
             </Text>
           </View>
           {EXTERNAL_LINKS.map(({ label, icon, section }) => (
@@ -116,7 +117,7 @@ export default function Sidebar({ visible, onClose, onNavigate }: SidebarProps) 
         <View style={[styles.bottomStripe, { backgroundColor: colors.primary, overflow: 'hidden' }]}>
           <View style={[styles.stripeBand, { backgroundColor: colors.primaryText }]}>
             <Text style={[styles.stripeText, { color: colors.background, opacity: 0.5 }]}>
-              TRUTH 24/7
+              IN REAL TIME
             </Text>
           </View>
         </View>
@@ -139,49 +140,44 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 10,
   },
-  headerImage: {
-    height: 180,
-    position: 'relative',
-    justifyContent: 'flex-end',
+  logoBanner: {
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
   },
-  headerOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+  bannerTopBar: {
+    height: 5,
+    backgroundColor: '#D52B1E',
   },
-  headerContent: {
-    padding: 20,
-    gap: 4,
-  },
-  headerDesc: {
-    color: '#F5F5F5',
-    fontSize: 15,
-    fontWeight: '900',
-    letterSpacing: 0.3,
-  },
-  headerBody: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 12,
-    fontWeight: '600',
-    lineHeight: 16,
-    marginBottom: 8,
-  },
-  logoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  logoBox: {
-    width: 48,
-    height: 48,
-    borderWidth: 2,
+  bannerBody: {
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 18,
+    paddingHorizontal: 24,
   },
-  appName: {
+  bannerLogo: {
+    width: DRAWER_WIDTH - 48,
+    height: (DRAWER_WIDTH - 48) * 0.42,
+  },
+  sloganRow: {
+    alignItems: 'center',
+    paddingBottom: 14,
+  },
+  sloganPill: {
+    backgroundColor: '#D52B1E',
+    paddingHorizontal: 16,
+    paddingVertical: 5,
+    borderRadius: 3,
+  },
+  sloganText: {
     fontFamily: 'BebasNeue_400Regular',
-    fontSize: 22,
-    color: '#F5F5F5',
-    letterSpacing: 0.5,
+    fontSize: 13,
+    color: '#FFFFFF',
+    letterSpacing: 3,
+  },
+  bannerBottomBar: {
+    height: 5,
+    backgroundColor: '#D52B1E',
   },
   navItem: {
     flexDirection: 'row',

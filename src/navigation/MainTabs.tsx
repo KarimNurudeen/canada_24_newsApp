@@ -7,6 +7,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { MaterialIcons } from '@expo/vector-icons';
 import AppHeader from '../components/AppHeader';
 import Sidebar from '../components/Sidebar';
+import { ENABLE_MANAGE_REGIONS } from '../config/features';
 import TopStoriesScreen from '../screens/TopStoriesScreen';
 import LocalNewsScreen from '../screens/LocalNewsScreen';
 import VideoFeedScreen from '../screens/VideoFeedScreen';
@@ -19,11 +20,11 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 const Tab = createBottomTabNavigator();
 
 const TAB_LABELS: Record<string, string> = {
-  TopStories: 'CANADA 24/7',
+  TopStories: 'CANADA IN REAL TIME',
   Local: 'LOCAL',
   Video: 'VIDEO',
   Saved: 'SAVED',
-  Sections: 'SECTIONS',
+  Sections: 'EXPLORE',
 };
 
 export default function MainTabs() {
@@ -33,7 +34,7 @@ export default function MainTabs() {
   const navigation = useNavigation<Nav>();
 
   const handleSidebarNavigate = (screen: string) => {
-    if (screen === 'ManageRegions') navigation.navigate('ManageRegions');
+    if (screen === 'ManageRegions' && ENABLE_MANAGE_REGIONS) navigation.navigate('ManageRegions');
     else if (screen === 'Settings') navigation.navigate('Settings');
     else if (screen === 'AlertSetup') navigation.navigate('AlertSetup');
   };
@@ -41,7 +42,7 @@ export default function MainTabs() {
   return (
     <SafeAreaView edges={['bottom', 'left', 'right']} style={{ flex: 1, backgroundColor: colors.background }}>
       <AppHeader
-        title={TAB_LABELS[activeTab] || 'CANADA 24/7'}
+        title={TAB_LABELS[activeTab] || 'CANADA IN REAL TIME'}
         onMenuPress={() => setSidebarVisible(true)}
       />
       <View style={{ flex: 1 }}>
@@ -113,7 +114,7 @@ export default function MainTabs() {
             name="Sections"
             component={SectionsScreen}
             options={{
-              tabBarLabel: 'Sections',
+              tabBarLabel: 'Explore',
               tabBarIcon: ({ color, focused }) => (
                 <MaterialIcons name={focused ? 'menu' : 'menu-open'} size={26} color={color} />
               ),

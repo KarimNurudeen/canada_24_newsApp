@@ -8,14 +8,13 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useApp } from '../context/AppContext';
-import { ALL_REGIONS } from '../data/newsData';
 import type { RootStackParamList } from '../navigation/types';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'RegionSelection'>;
 
 export default function RegionSelectionScreen() {
   const navigation = useNavigation<Nav>();
-  const { selectedRegions, toggleRegion, colors } = useApp();
+  const { selectedRegions, availableRegions, toggleRegion, colors } = useApp();
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
@@ -25,15 +24,15 @@ export default function RegionSelectionScreen() {
         {/* Header */}
         <View style={styles.header}>
           <Text style={[styles.stepLabel, { color: colors.primaryText }]}>Step 1 of 2:</Text>
-          <Text style={[styles.title, { color: colors.primaryText }]}>Get local news.</Text>
+          <Text style={[styles.title, { color: colors.primaryText }]}>Your Local Canada.</Text>
           <View style={{ height: 8 }} />
           <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
-            Set up your local feed by selecting regions from the list below.
+            Choose your regions to get local news, events, opportunities and more.
           </Text>
         </View>
 
         {/* Region list */}
-        {ALL_REGIONS.map(region => {
+        {availableRegions.map(region => {
           const checked = selectedRegions.includes(region);
           return (
             <TouchableOpacity

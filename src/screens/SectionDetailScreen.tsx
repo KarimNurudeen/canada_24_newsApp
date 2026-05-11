@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import ArticleEngagementRow from '../components/ArticleEngagementRow';
 import { useApp } from '../context/AppContext';
 import { fetchCategoryArticles } from '../services/newsService';
 import type { Article } from '../context/AppContext';
@@ -21,13 +22,17 @@ const SECTION_COLORS: Record<string, string> = {
   Entertainment: '#8e44ad',
   Technology:    '#2980b9',
   Sports:        '#e67e22',
-  Arts:          '#c0392b',
-  Science:       '#16a085',
   Indigenous:    '#d35400',
   World:         '#7f8c8d',
-  Opinion:       '#1a252f',
   Politics:      '#1976D2',
-  Environment:   '#2ecc71',
+  Immigration:   '#b03a2e',
+  Aviation:      '#2471a3',
+  Events:        '#af2d63',
+  'Auto News':   '#37474f',
+  'Blacks in Canada': '#1a1a1a',
+  'Education in Canada': '#6a1b9a',
+  Opportunities: '#00695c',
+  General:       '#455a64',
 };
 
 export default function SectionDetailScreen() {
@@ -141,6 +146,7 @@ export default function SectionDetailScreen() {
                     {item.headline}
                   </Text>
                   <Text style={[styles.timeText, { color: sectionColor }]}>{item.time}</Text>
+                  <ArticleEngagementRow article={item} style={styles.engagementRow} color={colors.primaryText + '99'} />
                 </View>
                 <TouchableOpacity
                   onPress={() => toggleSaveArticle(item)}
@@ -194,5 +200,6 @@ const styles = StyleSheet.create({
   thumb: { width: 90, height: 80, flexShrink: 0 },
   sectionBar: { height: 2, width: 32, marginHorizontal: 10, marginTop: 10, marginBottom: 4 },
   headline: { fontSize: 14, fontWeight: '700', lineHeight: 19, paddingHorizontal: 10 },
-  timeText: { fontSize: 11, fontWeight: '700', paddingHorizontal: 10, paddingBottom: 8, marginTop: 4 },
+  timeText: { fontSize: 11, fontWeight: '700', paddingHorizontal: 10, marginTop: 4 },
+  engagementRow: { paddingHorizontal: 10, paddingBottom: 10 },
 });

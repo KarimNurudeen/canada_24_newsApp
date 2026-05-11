@@ -7,12 +7,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useApp } from '../context/AppContext';
-import { ALL_REGIONS } from '../data/newsData';
 
 export default function ManageRegionsScreen() {
   const navigation = useNavigation();
-  const { colors, selectedRegions, toggleRegion } = useApp();
-  const available = ALL_REGIONS.filter(r => !selectedRegions.includes(r));
+  const { colors, selectedRegions, availableRegions, toggleRegion } = useApp();
+  const available = availableRegions.filter(r => !selectedRegions.includes(r));
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>

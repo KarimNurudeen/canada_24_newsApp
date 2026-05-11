@@ -6,6 +6,7 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import ArticleEngagementRow from '../components/ArticleEngagementRow';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import type { RootStackParamList } from '../navigation/types';
@@ -86,6 +87,7 @@ export default function SavedScreen() {
                 {item.headline}
               </Text>
               <Text style={[styles.savedTime, { color: colors.primary }]}>{item.time}</Text>
+              <ArticleEngagementRow article={item} style={styles.savedEngagement} />
             </View>
             <TouchableOpacity
               onPress={() => toggleSaveArticle(item)}
@@ -139,5 +141,6 @@ const styles = StyleSheet.create({
   },
   savedCategory: { fontSize: 10, fontWeight: '900', marginBottom: 3, paddingHorizontal: 12, paddingTop: 10 },
   savedHeadline: { fontSize: 14, fontWeight: '700', lineHeight: 19, paddingHorizontal: 12 },
-  savedTime: { fontSize: 11, fontWeight: '700', marginTop: 6, paddingHorizontal: 12, paddingBottom: 10, color: '#1976D2' },
+  savedTime: { fontSize: 11, fontWeight: '700', marginTop: 6, paddingHorizontal: 12, color: '#1976D2' },
+  savedEngagement: { paddingHorizontal: 12, paddingBottom: 12 },
 });

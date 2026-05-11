@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  StatusBar, ActivityIndicator, Dimensions,
+  StatusBar, ActivityIndicator, Dimensions, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Video, ResizeMode, type AVPlaybackStatus } from 'expo-av';
@@ -24,14 +24,16 @@ export default function VideoPlayerScreen() {
   const navigation = useNavigation();
   const route = useRoute<VideoPlayerRouteProp>();
   const { item } = route.params;
+  const sourceUrl = item.sourceUrl;
   const { colors } = useApp();
   const videoRef = useRef<Video>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [paused, setPaused] = useState(false);
   const [status, setStatus] = useState<AVPlaybackStatus | null>(null);
+  const hasDirectVideo = Boolean(item.videoUrl);
 
-  const videoUrl = SAMPLE_VIDEOS[item.isLive ? 'live' : 'news'];
+  const videoUrl = item.videoUrl || SAMPLE_VIDEOS[item.isLive ? 'live' : 'news'];
 
   const isPlaying = status?.isLoaded ? status.isPlaying : false;
   const durationMs = status?.isLoaded ? (status.durationMillis ?? 0) : 0;
@@ -107,6 +109,25 @@ export default function VideoPlayerScreen() {
             </Text>
           )}
         </View>
+
+        {item.description ? (
+          <Text style={[styles.infoDescription, { color: colors.primaryText }]}>
+            {item.description}
+          </Text>
+        ) : null}
+
+        {!hasDirectVideo ? (
+          <View style={styles.noticeBox}>
+            <Text style={styles.noticeText}>
+              Demo playback only. This story does not have a real video stream URL configured yet.
+            </Text>
+            {sourceUrl ? (
+              <TouchableOpacity onPress={() => void Linking.openURL(sourceUrl)}>
+                <Text style={[styles.sourceLink, { color: colors.primary }]}>Open source story</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        ) : null}
 
         {/* Controls row */}
         <View style={styles.controls}>
@@ -208,6 +229,26 @@ const styles = StyleSheet.create({
   },
   infoDate: { fontSize: 12, fontWeight: '700' },
   infoDuration: { fontSize: 12, fontWeight: '700', opacity: 0.6 },
+  infoDescription: {
+    fontSize: 14,
+    lineHeight: 21,
+    opacity: 0.82,
+  },
+  noticeBox: {
+    borderRadius: 10,
+    padding: 12,
+    backgroundColor: 'rgba(25,118,210,0.12)',
+    gap: 8,
+  },
+  noticeText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#e6eef8',
+  },
+  sourceLink: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
   controls: {
     flexDirection: 'row',
     gap: 12,

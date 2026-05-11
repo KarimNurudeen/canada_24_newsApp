@@ -1,74 +1,100 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Image,
-  StatusBar, Dimensions,
+  StatusBar, Dimensions, Animated,
 } from 'react-native';
-
-const APP_LOGO = require('../../assets/icon.png');
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { MaterialIcons } from '@expo/vector-icons';
 import type { RootStackParamList } from '../navigation/types';
+import { useApp } from '../context/AppContext';
+
+const CANADA247_LOGO = require('../../assets/canada247-logo.jpg');
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Splash'>;
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
+const CANADA_RED = '#D52B1E';
 
 export default function SplashScreen() {
   const navigation = useNavigation<Nav>();
+  const { onboardingComplete } = useApp();
+
+  const logoScale  = useRef(new Animated.Value(0.75)).current;
+  const logoOpacity = useRef(new Animated.Value(0)).current;
+  const sloganOpacity = useRef(new Animated.Value(0)).current;
+  const ctaOpacity  = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.sequence([
+      // Logo pops in
+      Animated.parallel([
+        Animated.spring(logoScale,   { toValue: 1, useNativeDriver: true, tension: 60, friction: 8 }),
+        Animated.timing(logoOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
+      ]),
+      // Slogan fades in
+      Animated.timing(sloganOpacity, { toValue: 1, duration: 400, delay: 100, useNativeDriver: true }),
+      // CTA fades in
+      Animated.timing(ctaOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
+    ]).start();
+  }, []);
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#1976D2" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-      {/* Background Canada map */}
-      <View style={styles.mapContainer} pointerEvents="none">
+      {/* Top red bar */}
+      <View style={styles.topBar} />
+
+      {/* Background map watermark */}
+      <View style={styles.mapWrap} pointerEvents="none">
         <Image
           source={{ uri: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6c/Canada_blank_map.svg/1200px-Canada_blank_map.svg.png' }}
           style={styles.mapImage}
           resizeMode="contain"
-          tintColor="rgba(255,255,255,0.18)"
+          tintColor="rgba(213,43,30,0.06)"
         />
       </View>
 
-      {/* Decorative diagonal stripes */}
-      <View style={[styles.stripe, { top: 40, width: 200, height: 4, transform: [{ rotate: '30deg' }] }]} />
-      <View style={[styles.stripe, { bottom: 60, right: 0, width: 150, height: 8, transform: [{ rotate: '30deg' }] }]} />
-
-      {/* Content */}
+      {/* Main content */}
       <View style={styles.content}>
-        {/* Welcome */}
-        <View style={styles.welcomeBlock}>
-          <Text style={styles.welcomeTitle}>Welcome</Text>
-          <Text style={styles.welcomeSubtitle}>to Canada's news app.</Text>
-        </View>
 
-        {/* Logo */}
-        <View style={styles.logoBlock}>
-          <View style={styles.logoRow}>
-            <View style={styles.iconBox}>
-              <Image source={APP_LOGO} style={{ width: 48, height: 48 }} resizeMode="contain" />
-            </View>
-            <Text style={styles.logoText}>CANADA</Text>
+        {/* Canada247 Logo — centrepiece */}
+        <Animated.View style={[styles.logoWrap, { opacity: logoOpacity, transform: [{ scale: logoScale }] }]}>
+          <Image
+            source={CANADA247_LOGO}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+        </Animated.View>
+
+        {/* Slogan */}
+        <Animated.View style={[styles.sloganWrap, { opacity: sloganOpacity }]}>
+          <View style={styles.sloganPill}>
+            <Text style={styles.sloganText}>CANADA IN REAL TIME</Text>
           </View>
-          <Text style={styles.logo247}>24/7 NEWS</Text>
-        </View>
-
-        {/* Bottom CTA */}
-        <View style={styles.bottomBlock}>
           <Text style={styles.tagline}>
-            News and analysis of the stories that matter most to Canadians.
+            News, opportunities, events & more —{'\n'}everything Canada, as it happens.
           </Text>
+        </Animated.View>
+
+        {/* CTA */}
+        <Animated.View style={[styles.ctaWrap, { opacity: ctaOpacity }]}>
           <TouchableOpacity
             style={styles.ctaButton}
-            onPress={() => navigation.navigate('RegionSelection')}
+            onPress={() => navigation.replace(onboardingComplete ? 'Main' : 'RegionSelection')}
             activeOpacity={0.85}
           >
-            <Text style={styles.ctaText}>OK, LET'S GO!</Text>
-            <MaterialIcons name="arrow-forward" size={20} color="#000000" />
+            <Text style={styles.ctaText}>{onboardingComplete ? 'CONTINUE' : 'GET STARTED'}</Text>
+            <MaterialIcons name="arrow-forward" size={20} color="#FFFFFF" />
           </TouchableOpacity>
-        </View>
+          <Text style={styles.taglineSub}>The pulse of Canada · 24/7</Text>
+        </Animated.View>
+
       </View>
+
+      {/* Bottom red bar */}
+      <View style={styles.bottomBar} />
     </View>
   );
 }
@@ -76,105 +102,100 @@ export default function SplashScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1976D2',
+    backgroundColor: '#FFFFFF',
     overflow: 'hidden',
   },
-  mapContainer: {
+  topBar: {
+    height: 6,
+    backgroundColor: CANADA_RED,
+  },
+  bottomBar: {
+    height: 6,
+    backgroundColor: CANADA_RED,
+  },
+  mapWrap: {
     position: 'absolute',
     top: 0, left: 0, right: 0, bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
   mapImage: {
-    width: width * 0.9,
-    height: width * 0.6,
-  },
-  stripe: {
-    position: 'absolute',
-    backgroundColor: '#000000',
+    width: width * 1.1,
+    height: height * 0.55,
+    opacity: 0.7,
   },
   content: {
     flex: 1,
+    alignItems: 'center',
+    justifyContent: 'space-evenly',
     paddingHorizontal: 32,
-    paddingVertical: 48,
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    paddingVertical: 40,
   },
-  welcomeBlock: {
+  logoWrap: {
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 6,
   },
-  welcomeTitle: {
+  logo: {
+    width: width * 0.82,
+    height: width * 0.38,
+    borderRadius: 8,
+  },
+  sloganWrap: {
+    alignItems: 'center',
+    gap: 14,
+  },
+  sloganPill: {
+    backgroundColor: CANADA_RED,
+    paddingHorizontal: 22,
+    paddingVertical: 7,
+    borderRadius: 3,
+  },
+  sloganText: {
     fontFamily: 'BebasNeue_400Regular',
-    fontSize: 64,
-    color: '#FFFFFF',
-    lineHeight: 58,
-    letterSpacing: 1,
-  },
-  welcomeSubtitle: {
-    fontFamily: 'BebasNeue_400Regular',
-    fontSize: 28,
-    color: '#FFFFFF',
-    letterSpacing: 0.5,
-  },
-  logoBlock: {
-    alignItems: 'center',
-  },
-  logoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  iconBox: {
-    width: 48,
-    height: 48,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoText: {
-    fontFamily: 'BebasNeue_400Regular',
-    fontSize: 42,
-    color: '#FFFFFF',
-    letterSpacing: 2,
-  },
-  logo247: {
-    fontFamily: 'BebasNeue_400Regular',
-    fontSize: 32,
+    fontSize: 17,
     color: '#FFFFFF',
     letterSpacing: 4,
-    lineHeight: 30,
-  },
-  bottomBlock: {
-    alignItems: 'center',
-    gap: 48,
-    width: '100%',
   },
   tagline: {
-    color: '#FFFFFF',
+    color: '#555',
     textAlign: 'center',
-    fontSize: 18,
-    fontWeight: '600',
-    lineHeight: 25,
-    paddingHorizontal: 24,
+    fontSize: 15,
+    fontWeight: '500',
+    lineHeight: 23,
+  },
+  ctaWrap: {
+    alignItems: 'center',
+    gap: 16,
+    width: '100%',
   },
   ctaButton: {
-    width: 280,
+    width: '100%',
     height: 56,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: CANADA_RED,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 4, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
+    gap: 12,
+    borderRadius: 4,
+    shadowColor: CANADA_RED,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
     elevation: 6,
   },
   ctaText: {
     fontFamily: 'BebasNeue_400Regular',
-    fontSize: 20,
-    color: '#000000',
+    fontSize: 22,
+    color: '#FFFFFF',
+    letterSpacing: 2,
+  },
+  taglineSub: {
+    color: '#999',
+    fontSize: 12,
     letterSpacing: 1,
   },
 });

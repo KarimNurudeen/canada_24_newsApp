@@ -56,7 +56,7 @@ export default function AuthEmailScreen() {
           <View style={styles.iconBox}>
             <Image source={APP_LOGO} style={{ width: 34, height: 34 }} resizeMode="contain" />
           </View>
-          <Text style={styles.logoText}>CANADA 24/7</Text>
+          <Text style={styles.logoText}>CANADA IN REAL TIME</Text>
         </View>
         <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <MaterialIcons name="close" size={24} color="#fff" />
@@ -92,8 +92,7 @@ export default function AuthEmailScreen() {
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
-              returnKeyType="done"
-              onSubmitEditing={handleContinue}
+              returnKeyType="next"
             />
           </View>
 
@@ -118,7 +117,7 @@ export default function AuthEmailScreen() {
           </TouchableOpacity>
 
           <Text style={[styles.disclaimer, { color: colors.hint }]}>
-            By continuing, you agree to Canada 24/7's Terms of Service and Privacy Policy.
+            By continuing, you agree to Canada In Real Time's Terms of Service and Privacy Policy.
           </Text>
         </View>
       </KeyboardAvoidingView>

@@ -7,18 +7,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, CommonActions } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { ALERT_DEFINITIONS } from '../config/content';
 import { useApp } from '../context/AppContext';
 import { scheduleAlertNotification } from '../services/notificationService';
 import type { RootStackParamList } from '../navigation/types';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'AlertSetup'>;
 
-const NOTIFICATION_ITEMS = [
-  'COVID-19 Updates', 'Breaking News', 'Top Stories', 'Morning Brief', 'Recommended For You',
-];
-const TOPIC_ITEMS = [
-  'Business', 'Climate Change', 'Entertainment', 'Health', 'Technology',
-];
+const NOTIFICATION_ITEMS = ALERT_DEFINITIONS.slice(0, 3).map(item => item.label);
+const TOPIC_ITEMS = ALERT_DEFINITIONS.slice(3).map(item => item.label);
 
 function AlertToggleRow({ label, active, onToggle, colors }: {
   label: string; active: boolean; onToggle: () => void;
@@ -87,7 +84,7 @@ export default function AlertSetupScreen() {
             <Text style={[styles.title, { color: colors.primaryText }]}>Set your alerts.</Text>
             <View style={{ height: 8 }} />
             <Text style={[styles.subtitle, { color: colors.secondaryText }]}>
-              Get the latest news in your community, Canada and the world.
+              Stay on top of everything happening in Canada — in your community and beyond.
             </Text>
           </View>
         )}

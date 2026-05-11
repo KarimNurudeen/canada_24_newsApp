@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { ENABLE_MANAGE_REGIONS } from '../config/features';
 import { useApp } from '../context/AppContext';
 import type { RootStackParamList } from '../navigation/types';
 
@@ -26,15 +27,17 @@ export default function AppHeader({ title, onMenuPress }: AppHeaderProps) {
         </TouchableOpacity>
         <Text style={[styles.title, { color: colors.background }]}>{title}</Text>
         <View style={styles.actions}>
+          {ENABLE_MANAGE_REGIONS ? (
+            <TouchableOpacity
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              onPress={() => navigation.navigate('ManageRegions')}
+            >
+              <MaterialIcons name="cast" size={24} color={colors.background} />
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            onPress={() => navigation.navigate('ManageRegions')}
-          >
-            <MaterialIcons name="cast" size={24} color={colors.background} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            style={{ marginLeft: 16 }}
+            style={{ marginLeft: ENABLE_MANAGE_REGIONS ? 16 : 0 }}
             onPress={() => navigation.navigate('Search')}
           >
             <MaterialIcons name="search" size={24} color={colors.background} />

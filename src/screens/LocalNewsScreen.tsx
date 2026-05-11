@@ -1,22 +1,60 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, Image, FlatList,
+  StyleSheet, Image, FlatList, ActivityIndicator,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import ArticleEngagementRow from '../components/ArticleEngagementRow';
 import { useApp } from '../context/AppContext';
-import { LOCAL_ARTICLES, CITY_TABS } from '../data/newsData';
+import { fetchLocalNews } from '../services/newsService';
+import type { Article } from '../context/AppContext';
 import type { RootStackParamList } from '../navigation/types';
 
 export default function LocalNewsScreen() {
-  const { colors, toggleSaveArticle, isArticleSaved } = useApp();
+  const { colors, toggleSaveArticle, isArticleSaved, availableRegions, selectedRegions } = useApp();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const [activeCity, setActiveCity] = useState('Calgary');
+  const regionTabs = ['All Regions', ...(selectedRegions.length > 0 ? selectedRegions : availableRegions)];
+  const [activeCity, setActiveCity] = useState('All Regions');
   const [sortMode, setSortMode] = useState<'editors' | 'time'>('editors');
+  const [articles, setArticles] = useState<Article[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const articles = LOCAL_ARTICLES[activeCity] || [];
+  useEffect(() => {
+    if (!regionTabs.includes(activeCity)) {
+      setActiveCity(regionTabs[0] ?? 'All Regions');
+    }
+  }, [activeCity, regionTabs]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      setLoading(true);
+      try {
+        const data = await fetchLocalNews(activeCity === 'All Regions' ? undefined : activeCity);
+        if (!cancelled) {
+          setArticles(data);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeCity]);
+
+  const sortedArticles = [...articles].sort((a, b) => {
+    if (sortMode === 'editors') {
+      return Number(Boolean(b.isUpdated || b.isLive)) - Number(Boolean(a.isUpdated || a.isLive));
+    }
+    return 0;
+  });
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -27,7 +65,7 @@ export default function LocalNewsScreen() {
         style={{ flexGrow: 0, backgroundColor: colors.primary }}
         contentContainerStyle={{ paddingHorizontal: 4 }}
       >
-        {CITY_TABS.map(city => {
+        {regionTabs.map(city => {
           const isActive = city === activeCity;
           return (
             <TouchableOpacity
@@ -73,8 +111,14 @@ export default function LocalNewsScreen() {
       </View>
 
       {/* Articles */}
+      {loading ? (
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.primaryText }]}>Loading local news...</Text>
+        </View>
+      ) : (
       <FlatList
-        data={articles}
+        data={sortedArticles}
         keyExtractor={item => item.id}
         contentContainerStyle={{ padding: 16, gap: 12 }}
         renderItem={({ item }) => {
@@ -88,11 +132,17 @@ export default function LocalNewsScreen() {
               activeOpacity={0.8}
               onPress={() => navigation.navigate('ArticleDetail', { article: item })}
             >
-              <Image
-                source={{ uri: item.imgUrl }}
-                style={styles.articleThumb}
-                resizeMode="cover"
-              />
+              {item.imgUrl ? (
+                <Image
+                  source={{ uri: item.imgUrl }}
+                  style={styles.articleThumb}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={[styles.articleThumb, styles.thumbFallback, { backgroundColor: colors.primary }]}>
+                  <MaterialIcons name="article" size={24} color="#fff" />
+                </View>
+              )}
               <View style={{ flex: 1 }}>
                 {item.isUpdated && (
                   <View style={[styles.updatedBadge, { backgroundColor: colors.primary }]}>
@@ -103,6 +153,7 @@ export default function LocalNewsScreen() {
                   {item.headline}
                 </Text>
                 <Text style={[styles.articleTime, { color: colors.primary }]}>{item.time}</Text>
+                <ArticleEngagementRow article={item} style={styles.articleEngagement} />
               </View>
               <TouchableOpacity
                 onPress={() => toggleSaveArticle(item)}
@@ -118,6 +169,7 @@ export default function LocalNewsScreen() {
           );
         }}
       />
+      )}
     </View>
   );
 }
@@ -135,6 +187,14 @@ const styles = StyleSheet.create({
   },
   sortBtn: { paddingVertical: 12, paddingHorizontal: 20 },
   sortBtnText: { fontSize: 13, fontWeight: '900' },
+  loadingWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    padding: 32,
+  },
+  loadingText: { fontSize: 14, fontWeight: '600', opacity: 0.6 },
   articleCard: {
     flexDirection: 'row',
     gap: 12,
@@ -147,6 +207,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   articleThumb: { width: 90, height: 72, flexShrink: 0 },
+  thumbFallback: { alignItems: 'center', justifyContent: 'center' },
   updatedBadge: {
     alignSelf: 'flex-start',
     paddingHorizontal: 5,
@@ -156,4 +217,5 @@ const styles = StyleSheet.create({
   updatedText: { color: '#fff', fontSize: 10, fontWeight: '900' },
   articleHeadline: { fontSize: 14, fontWeight: '700', lineHeight: 19 },
   articleTime: { fontSize: 11, fontWeight: '700', marginTop: 4 },
+  articleEngagement: { marginTop: 8 },
 });

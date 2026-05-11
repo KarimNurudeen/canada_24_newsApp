@@ -7,9 +7,9 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import ArticleEngagementRow from '../components/ArticleEngagementRow';
 import { useApp } from '../context/AppContext';
 import { searchArticles } from '../services/newsService';
-import { TOP_STORIES } from '../data/newsData';
 import type { Article } from '../context/AppContext';
 import type { RootStackParamList } from '../navigation/types';
 
@@ -40,19 +40,7 @@ export default function SearchScreen() {
     setLoading(true);
     setSearched(true);
     try {
-      const live = await searchArticles(q);
-      // Also search local mock data
-      const local = TOP_STORIES.filter(a =>
-        a.headline.toLowerCase().includes(q.toLowerCase()) ||
-        (a.category ?? '').toLowerCase().includes(q.toLowerCase())
-      );
-      const combined = [...live, ...local];
-      const seen = new Set<string>();
-      setResults(combined.filter(a => {
-        if (seen.has(a.headline)) return false;
-        seen.add(a.headline);
-        return true;
-      }));
+      setResults(await searchArticles(q));
     } catch {
       setResults([]);
     } finally {
@@ -167,6 +155,7 @@ export default function SearchScreen() {
                   {item.headline}
                 </Text>
                 <Text style={[styles.resultTime, { color: colors.primary }]}>{item.time}</Text>
+                <ArticleEngagementRow article={item} style={styles.resultEngagement} />
               </View>
             </TouchableOpacity>
           )}
@@ -224,5 +213,6 @@ const styles = StyleSheet.create({
   resultThumb: { width: 90, height: 80, flexShrink: 0 },
   resultCategory: { fontSize: 10, fontWeight: '900', paddingHorizontal: 10, paddingTop: 8 },
   resultHeadline: { fontSize: 14, fontWeight: '700', lineHeight: 19, paddingHorizontal: 10 },
-  resultTime: { fontSize: 11, fontWeight: '700', paddingHorizontal: 10, paddingBottom: 8, marginTop: 4 },
+  resultTime: { fontSize: 11, fontWeight: '700', paddingHorizontal: 10, marginTop: 4 },
+  resultEngagement: { paddingHorizontal: 10, paddingBottom: 10 },
 });

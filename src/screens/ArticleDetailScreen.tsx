@@ -66,8 +66,9 @@ export default function ArticleDetailScreen() {
   const { colors, toggleSaveArticle, isArticleSaved } = useApp();
   const { user } = useAuth();
   const {
+    hydrateArticleInteractions,
     getReaction, getLikeCount, getDislikeCount,
-    getComments, isReposted,
+    getComments, getCommentCount, isReposted, getRepostCount,
     toggleLike, toggleDislike, addComment, toggleRepost,
   } = useInteractions();
   const insets = useSafeAreaInsets();
@@ -84,16 +85,22 @@ export default function ArticleDetailScreen() {
 
   const fullText = [article.headline, ...bodyText].join('. ');
 
-  const reaction = getReaction(article.id);
-  const likeCount = getLikeCount(article.id);
-  const dislikeCount = getDislikeCount(article.id);
+  const reaction = getReaction(article.id) ?? article.userReaction ?? null;
+  const likeCount = getLikeCount(article.id) ?? article.likesCount ?? 0;
+  const dislikeCount = getDislikeCount(article.id) ?? article.dislikesCount ?? 0;
   const comments = getComments(article.id);
-  const reposted = isReposted(article.id);
+  const commentCount = getCommentCount(article.id) ?? article.commentsCount ?? comments.length;
+  const reposted = isReposted(article.id) ?? article.isReposted ?? false;
+  const repostCount = getRepostCount(article.id) ?? article.repostsCount ?? 0;
 
   // Stop speech when leaving screen
   useEffect(() => {
     return () => { Speech.stop(); };
   }, []);
+
+  useEffect(() => {
+    void hydrateArticleInteractions(article);
+  }, [article.id]);
 
   const handleListen = useCallback(async () => {
     const speaking = await Speech.isSpeakingAsync();
@@ -300,14 +307,14 @@ export default function ArticleDetailScreen() {
               >
                 <MaterialIcons name="chat-bubble-outline" size={22} color={colors.primaryText} />
                 <Text style={[styles.interactionCount, { color: colors.primaryText }]}>
-                  {comments.length}
+                  {commentCount}
                 </Text>
               </TouchableOpacity>
 
               {/* Repost */}
               <TouchableOpacity
                 style={styles.interactionBtn}
-                onPress={() => requireAuth(user, navigation, () => toggleRepost(article.id))}
+                onPress={() => requireAuth(user, navigation, () => toggleRepost(article.id, reposted))}
                 activeOpacity={0.75}
               >
                 <MaterialIcons
@@ -316,7 +323,7 @@ export default function ArticleDetailScreen() {
                   color={reposted ? '#2E7D32' : colors.primaryText}
                 />
                 <Text style={[styles.interactionCount, { color: reposted ? '#2E7D32' : colors.primaryText }]}>
-                  {reposted ? 'Reposted' : 'Repost'}
+                  {repostCount}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -326,7 +333,7 @@ export default function ArticleDetailScreen() {
           <View style={[styles.commentsSection, { backgroundColor: colors.surface }]}>
             <View style={[styles.commentsHeader, { borderBottomColor: colors.primaryText + '15' }]}>
               <Text style={[styles.commentsTitle, { color: colors.primaryText }]}>
-                COMMENTS ({comments.length})
+                COMMENTS ({commentCount})
               </Text>
             </View>
 
@@ -334,7 +341,7 @@ export default function ArticleDetailScreen() {
             <View style={[styles.commentInputRow, { borderBottomColor: colors.primaryText + '15' }]}>
               <View style={[styles.commentAvatar, { backgroundColor: colors.primary }]}>
                 <Text style={styles.commentAvatarText}>
-                  {user ? user.displayName[0].toUpperCase() : '?'}
+                  {user ? (user.displayName?.[0]?.toUpperCase() ?? '?') : '?'}
                 </Text>
               </View>
               <TextInput
@@ -377,7 +384,7 @@ export default function ArticleDetailScreen() {
               comments.map(c => (
                 <View key={c.id} style={[styles.commentItem, { borderBottomColor: colors.primaryText + '10' }]}>
                   <View style={[styles.commentAvatar, { backgroundColor: colors.primary }]}>
-                    <Text style={styles.commentAvatarText}>{c.authorName[0].toUpperCase()}</Text>
+                    <Text style={styles.commentAvatarText}>{c.authorName?.[0]?.toUpperCase() ?? '?'}</Text>
                   </View>
                   <View style={{ flex: 1 }}>
                     <View style={styles.commentMeta}>
@@ -532,7 +539,7 @@ const styles = StyleSheet.create({
   },
   commentInputRow: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
     gap: 10,
     padding: 16,
     borderBottomWidth: 1,
@@ -551,18 +558,22 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 2,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingTop: 12,
+    paddingBottom: 12,
     fontSize: 14,
     fontWeight: '600',
-    maxHeight: 100,
+    minHeight: 96,
+    maxHeight: 180,
     lineHeight: 20,
+    textAlignVertical: 'top',
   },
   commentSendBtn: {
-    width: 36,
-    height: 36,
+    width: 42,
+    height: 42,
     borderRadius: 2,
     alignItems: 'center',
     justifyContent: 'center',
+    alignSelf: 'flex-end',
     flexShrink: 0,
   },
   noComments: {

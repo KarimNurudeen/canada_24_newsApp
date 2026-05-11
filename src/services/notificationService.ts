@@ -3,12 +3,15 @@ import { Platform } from 'react-native';
 
 export function setupNotificationHandler(): void {
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-    }),
+    handleNotification: async (notification) => {
+      const isReaction = notification.request.content.data?.type === 'reaction';
+      return {
+        shouldShowBanner: !isReaction,
+        shouldShowList: !isReaction,
+        shouldPlaySound: true,
+        shouldSetBadge: !isReaction,
+      };
+    },
   });
 }
 
@@ -26,6 +29,12 @@ export async function createAndroidChannels(): Promise<void> {
     importance: Notifications.AndroidImportance.DEFAULT,
     sound: 'default',
   });
+  await Notifications.setNotificationChannelAsync('reaction-feedback', {
+    name: 'Reaction Feedback',
+    importance: Notifications.AndroidImportance.HIGH,
+    sound: 'default',
+    vibrationPattern: [0, 60],
+  });
 }
 
 export async function requestPermissions(): Promise<boolean> {
@@ -35,17 +44,57 @@ export async function requestPermissions(): Promise<boolean> {
   return status === 'granted';
 }
 
+// Plays the phone's native notification sound — no visible banner while app is open
+export async function playReactionFeedback(): Promise<void> {
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: '',
+        body: '',
+        sound: true,
+        data: { type: 'reaction' },
+        ...(Platform.OS === 'android' ? { channelId: 'reaction-feedback' } : {}),
+      },
+      trigger: null,
+    });
+  } catch {}
+}
+
+// Shows a visible native notification banner for new content
+export async function showNewContentNotification(payload: {
+  title: string;
+  body: string;
+  isBreaking?: boolean;
+}): Promise<void> {
+  const granted = await requestPermissions();
+  if (!granted) return;
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: payload.title,
+        body: payload.body,
+        sound: true,
+        data: { type: 'new_content' },
+        ...(Platform.OS === 'android'
+          ? { channelId: payload.isBreaking ? 'breaking-news' : 'general' }
+          : {}),
+      },
+      trigger: null,
+    });
+  } catch {}
+}
+
 const ALERT_MESSAGES: Record<string, { title: string; body: string }> = {
-  'Breaking News':         { title: 'BREAKING NEWS', body: 'A major story is developing. Tap to read the latest.' },
-  'Top Stories':           { title: 'TOP STORIES UPDATE', body: "Today's most important Canadian news is ready." },
-  'COVID-19 Updates':      { title: 'COVID-19 UPDATE', body: 'New developments on COVID-19 across Canada.' },
-  'Morning Brief':         { title: 'GOOD MORNING CANADA', body: "Here's your morning news briefing." },
-  'Recommended For You':   { title: 'STORIES FOR YOU', body: 'New personalized stories based on your interests.' },
-  'Business':              { title: 'BUSINESS & ECONOMY', body: 'Latest market news and economic developments.' },
-  'Climate Change':        { title: 'CLIMATE UPDATE', body: 'New report on climate developments in Canada.' },
-  'Entertainment':         { title: 'ENTERTAINMENT', body: 'New stories in arts & entertainment.' },
-  'Health':                { title: 'HEALTH NEWS', body: 'Latest health and wellness updates.' },
-  'Technology':            { title: 'TECH NEWS', body: 'New developments in Canadian tech.' },
+  'Breaking News':       { title: 'BREAKING NEWS', body: 'A major story is developing. Tap to read the latest.' },
+  'Top Stories':         { title: 'TOP STORIES UPDATE', body: "Today's most important Canadian news is ready." },
+  'Local News':          { title: 'LOCAL NEWS UPDATE', body: 'Fresh stories from your selected Canadian regions are available.' },
+  'Business':            { title: 'BUSINESS & ECONOMY', body: 'Latest market news and economic developments.' },
+  'Entertainment':       { title: 'ENTERTAINMENT', body: 'New stories in arts & entertainment.' },
+  'Health':              { title: 'HEALTH NEWS', body: 'Latest health and wellness updates.' },
+  'Technology':          { title: 'TECH NEWS', body: 'New developments in Canadian tech.' },
+  'Politics':            { title: 'POLITICS', body: 'Political developments from Canada and Parliament are in.' },
+  'Sports':              { title: 'SPORTS', body: 'New sports coverage and scores are available.' },
+  'World':               { title: 'WORLD', body: 'International stories relevant to Canada are ready.' },
 };
 
 export async function scheduleAlertNotification(alertKey: string): Promise<void> {
