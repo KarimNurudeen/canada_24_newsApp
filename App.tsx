@@ -15,10 +15,10 @@ import SplashScreenView from './src/screens/SplashScreen';
 import RegionSelectionScreen from './src/screens/RegionSelectionScreen';
 import AlertSetupScreen from './src/screens/AlertSetupScreen';
 import ManageRegionsScreen from './src/screens/ManageRegionsScreen';
-import SettingsScreen from './src/screens/SettingsScreen';
 import ArticleDetailScreen from './src/screens/ArticleDetailScreen';
 import VideoPlayerScreen from './src/screens/VideoPlayerScreen';
-import SearchScreen from './src/screens/SearchScreen';
+import LocalNewsScreen from './src/screens/LocalNewsScreen';
+import SavedScreen from './src/screens/SavedScreen';
 import SectionDetailScreen from './src/screens/SectionDetailScreen';
 import CreatePostScreen from './src/screens/CreatePostScreen';
 import LaunchScreen from './src/screens/LaunchScreen';
@@ -56,10 +56,10 @@ function AppNavigator() {
       {ENABLE_MANAGE_REGIONS ? (
         <Stack.Screen name="ManageRegions" component={ManageRegionsScreen} />
       ) : null}
-      <Stack.Screen name="Settings" component={SettingsScreen} />
       <Stack.Screen name="ArticleDetail" component={ArticleDetailScreen} />
       <Stack.Screen name="VideoPlayer" component={VideoPlayerScreen} />
-      <Stack.Screen name="Search" component={SearchScreen} options={{ animation: 'fade' }} />
+      <Stack.Screen name="LocalNews" component={LocalNewsScreen} />
+      <Stack.Screen name="SavedStories" component={SavedScreen} />
       <Stack.Screen name="SectionDetail" component={SectionDetailScreen} />
       {ENABLE_USER_POST_CREATION ? (
         <Stack.Screen name="CreatePost" component={CreatePostScreen} options={{ animation: 'slide_from_bottom' }} />

@@ -10,6 +10,8 @@ export interface VideoItem {
   liveText?: string;
   sourceUrl?: string;
   videoUrl?: string;
+  repostsCount?: number;
+  isReposted?: boolean;
 }
 
 export interface VideoFeed {

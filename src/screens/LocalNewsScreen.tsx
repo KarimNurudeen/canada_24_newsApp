@@ -1,22 +1,27 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, Image, FlatList, ActivityIndicator,
+  StyleSheet, FlatList, ActivityIndicator,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import ArticleEngagementRow from '../components/ArticleEngagementRow';
+import ArticleRow from '../components/ArticleRow';
 import { useApp } from '../context/AppContext';
 import { fetchLocalNews } from '../services/newsService';
 import type { Article } from '../context/AppContext';
 import type { RootStackParamList } from '../navigation/types';
 
+type LocalNewsRouteProp = RouteProp<RootStackParamList, 'LocalNews'>;
+
 export default function LocalNewsScreen() {
-  const { colors, toggleSaveArticle, isArticleSaved, availableRegions, selectedRegions } = useApp();
+  const { colors, availableRegions, selectedRegions } = useApp();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const route = useRoute<LocalNewsRouteProp>();
+  const insets = useSafeAreaInsets();
   const regionTabs = ['All Regions', ...(selectedRegions.length > 0 ? selectedRegions : availableRegions)];
-  const [activeCity, setActiveCity] = useState('All Regions');
+  const [activeCity, setActiveCity] = useState(route.params?.region ?? 'All Regions');
   const [sortMode, setSortMode] = useState<'editors' | 'time'>('editors');
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,6 +63,15 @@ export default function LocalNewsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
+      {/* Back header */}
+      <View style={[styles.backHeader, { paddingTop: insets.top + 8, backgroundColor: colors.background }]}>
+        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <MaterialIcons name="arrow-back" size={24} color={colors.primaryText} />
+        </TouchableOpacity>
+        <Text style={[styles.backHeaderTitle, { color: colors.primaryText }]}>Local News</Text>
+        <View style={{ width: 24 }} />
+      </View>
+
       {/* City tabs */}
       <ScrollView
         horizontal
@@ -120,54 +134,9 @@ export default function LocalNewsScreen() {
       <FlatList
         data={sortedArticles}
         keyExtractor={item => item.id}
-        contentContainerStyle={{ padding: 16, gap: 12 }}
-        renderItem={({ item }) => {
-          const saved = isArticleSaved(item.id);
-          return (
-            <TouchableOpacity
-              style={[styles.articleCard, {
-                backgroundColor: colors.surface,
-                borderColor: colors.primaryText,
-              }]}
-              activeOpacity={0.8}
-              onPress={() => navigation.navigate('ArticleDetail', { article: item })}
-            >
-              {item.imgUrl ? (
-                <Image
-                  source={{ uri: item.imgUrl }}
-                  style={styles.articleThumb}
-                  resizeMode="cover"
-                />
-              ) : (
-                <View style={[styles.articleThumb, styles.thumbFallback, { backgroundColor: colors.primary }]}>
-                  <MaterialIcons name="article" size={24} color="#fff" />
-                </View>
-              )}
-              <View style={{ flex: 1 }}>
-                {item.isUpdated && (
-                  <View style={[styles.updatedBadge, { backgroundColor: colors.primary }]}>
-                    <Text style={styles.updatedText}>UPDATED</Text>
-                  </View>
-                )}
-                <Text style={[styles.articleHeadline, { color: colors.primaryText }]} numberOfLines={3}>
-                  {item.headline}
-                </Text>
-                <Text style={[styles.articleTime, { color: colors.primary }]}>{item.time}</Text>
-                <ArticleEngagementRow article={item} style={styles.articleEngagement} />
-              </View>
-              <TouchableOpacity
-                onPress={() => toggleSaveArticle(item)}
-                style={{ paddingLeft: 4 }}
-              >
-                <MaterialIcons
-                  name={saved ? 'bookmark' : 'bookmark-border'}
-                  size={20}
-                  color={saved ? colors.primary : colors.hint as string}
-                />
-              </TouchableOpacity>
-            </TouchableOpacity>
-          );
-        }}
+        contentContainerStyle={{ paddingHorizontal: 20 }}
+        ItemSeparatorComponent={() => <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: colors.divider }} />}
+        renderItem={({ item }) => <ArticleRow article={item} />}
       />
       )}
     </View>
@@ -175,6 +144,14 @@ export default function LocalNewsScreen() {
 }
 
 const styles = StyleSheet.create({
+  backHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+  },
+  backHeaderTitle: { fontSize: 17, fontWeight: '700' },
   cityTab: {
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -195,27 +172,4 @@ const styles = StyleSheet.create({
     padding: 32,
   },
   loadingText: { fontSize: 14, fontWeight: '600', opacity: 0.6 },
-  articleCard: {
-    flexDirection: 'row',
-    gap: 12,
-    padding: 12,
-    borderWidth: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 2, height: 2 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 2,
-  },
-  articleThumb: { width: 90, height: 72, flexShrink: 0 },
-  thumbFallback: { alignItems: 'center', justifyContent: 'center' },
-  updatedBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    marginBottom: 4,
-  },
-  updatedText: { color: '#fff', fontSize: 10, fontWeight: '900' },
-  articleHeadline: { fontSize: 14, fontWeight: '700', lineHeight: 19 },
-  articleTime: { fontSize: 11, fontWeight: '700', marginTop: 4 },
-  articleEngagement: { marginTop: 8 },
 });

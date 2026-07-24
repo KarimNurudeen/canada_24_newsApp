@@ -1,28 +1,28 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, Image, Dimensions, ActivityIndicator,
+  StyleSheet, Image, ActivityIndicator,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Radius, SoftShadow } from '../theme';
 import { useApp } from '../context/AppContext';
 import type { RootStackParamList } from '../navigation/types';
 import { fetchVideoFeed } from '../services/newsService';
 import type { VideoFeed, VideoItem } from '../types/video';
 
-const { width } = Dimensions.get('window');
-const CARD_WIDTH = 200;
-
-function VideoCard({ item, colors }: { item: VideoItem; colors: ReturnType<typeof useApp>['colors'] }) {
+function VideoRow({ item, colors }: { item: VideoItem; colors: ReturnType<typeof useApp>['colors'] }) {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   return (
     <TouchableOpacity
-      style={[styles.videoCard, { marginRight: 12 }]}
+      style={styles.videoRow}
       activeOpacity={0.8}
       onPress={() => navigation.navigate('VideoPlayer', { item })}
     >
-      <View style={styles.videoThumbContainer}>
+      {/* Left: video thumbnail */}
+      <View style={[styles.videoThumbContainer, { borderRadius: Radius.md, overflow: 'hidden' }]}>
         {item.imgUrl ? (
           <>
             <Image source={{ uri: item.imgUrl }} style={styles.videoThumb} resizeMode="cover" />
@@ -30,14 +30,13 @@ function VideoCard({ item, colors }: { item: VideoItem; colors: ReturnType<typeo
           </>
         ) : (
           <View style={styles.videoPlaceholder}>
-            <MaterialIcons name="video-library" size={34} color="rgba(255,255,255,0.9)" />
-            <Text style={styles.videoPlaceholderText}>Admin Upload</Text>
+            <MaterialIcons name="video-library" size={28} color="rgba(255,255,255,0.9)" />
           </View>
         )}
 
         {/* Play button */}
         <View style={styles.playCircle}>
-          <MaterialIcons name="play-circle-outline" size={40} color="rgba(255,255,255,0.9)" />
+          <MaterialIcons name="play-circle-outline" size={32} color="rgba(255,255,255,0.9)" />
         </View>
 
         {/* Live / Coming Up badge */}
@@ -54,22 +53,26 @@ function VideoCard({ item, colors }: { item: VideoItem; colors: ReturnType<typeo
           </View>
         )}
       </View>
-      <Text style={[styles.videoTitle, { color: colors.primaryText }]} numberOfLines={2}>
-        {item.title}
-      </Text>
-      {item.description ? (
-        <Text style={[styles.videoDescription, { color: colors.primaryText }]} numberOfLines={3}>
-          {item.description}
+
+      {/* Right: title + description */}
+      <View style={styles.videoInfo}>
+        <Text style={[styles.videoTitle, { color: colors.primaryText }]} numberOfLines={2}>
+          {item.title}
         </Text>
-      ) : null}
-      <Text style={[styles.videoDate, { color: colors.primary }]}>{item.date}</Text>
+        {item.description ? (
+          <Text style={[styles.videoDescription, { color: colors.primaryText }]} numberOfLines={3}>
+            {item.description}
+          </Text>
+        ) : null}
+        <Text style={[styles.videoDate, { color: colors.primary }]}>{item.date}</Text>
+      </View>
     </TouchableOpacity>
   );
 }
 
 interface SectionHeaderProps {
   title: string;
-  subtitle: string;
+  subtitle?: string;
   linkText?: string;
   colors: ReturnType<typeof useApp>['colors'];
 }
@@ -79,7 +82,9 @@ function SectionHeader({ title, subtitle, linkText, colors }: SectionHeaderProps
     <View style={styles.sectionHeader}>
       <View style={{ flex: 1 }}>
         <Text style={[styles.sectionTitle, { color: colors.primaryText }]}>{title}</Text>
-        <Text style={[styles.sectionSubtitle, { color: colors.primaryText }]}>{subtitle}</Text>
+        {subtitle ? (
+          <Text style={[styles.sectionSubtitle, { color: colors.primaryText }]}>{subtitle}</Text>
+        ) : null}
       </View>
       {linkText ? (
         <TouchableOpacity>
@@ -92,6 +97,7 @@ function SectionHeader({ title, subtitle, linkText, colors }: SectionHeaderProps
 
 export default function VideoFeedScreen() {
   const { colors } = useApp();
+  const insets = useSafeAreaInsets();
   const [videoFeed, setVideoFeed] = useState<VideoFeed>({ trending: [], live: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -120,7 +126,7 @@ export default function VideoFeedScreen() {
   const hasAnyVideos = hasTrending || hasLive;
 
   return (
-    <ScrollView style={{ backgroundColor: colors.background }} contentContainerStyle={{ paddingBottom: 32 }}>
+    <ScrollView style={{ backgroundColor: colors.background }} contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: 32 }}>
       {loading ? (
         <View style={styles.stateContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
@@ -131,7 +137,7 @@ export default function VideoFeedScreen() {
       {!loading && !hasAnyVideos ? (
         <View style={styles.stateContainer}>
           <Text style={[styles.stateText, { color: colors.primaryText }]}>
-            {error ?? 'No admin-uploaded videos are available yet.'}
+            {error ?? 'No videos are available yet.'}
           </Text>
           <TouchableOpacity style={[styles.retryButton, { backgroundColor: colors.primary }]} onPress={() => void loadVideoFeed()}>
             <Text style={styles.retryButtonText}>Retry</Text>
@@ -143,16 +149,11 @@ export default function VideoFeedScreen() {
         <>
           <SectionHeader
             title="Trending Video"
-            subtitle="Uploaded locally from Django admin"
             colors={colors}
           />
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24, gap: 12 }}
-          >
-            {videoFeed.trending.map(item => <VideoCard key={item.id} item={item} colors={colors} />)}
-          </ScrollView>
+          <View style={{ paddingHorizontal: 16, paddingBottom: 8, gap: 14 }}>
+            {videoFeed.trending.map(item => <VideoRow key={item.id} item={item} colors={colors} />)}
+          </View>
         </>
       ) : null}
 
@@ -167,13 +168,9 @@ export default function VideoFeedScreen() {
             subtitle="Stories currently flagged as live by the backend feed"
             colors={colors}
           />
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24, gap: 12 }}
-          >
-            {videoFeed.live.map(item => <VideoCard key={item.id} item={item} colors={colors} />)}
-          </ScrollView>
+          <View style={{ paddingHorizontal: 16, paddingBottom: 8, gap: 14 }}>
+            {videoFeed.live.map(item => <VideoRow key={item.id} item={item} colors={colors} />)}
+          </View>
         </>
       ) : null}
     </ScrollView>
@@ -196,9 +193,10 @@ const styles = StyleSheet.create({
   },
   sectionSubtitle: { fontSize: 13, fontWeight: '700', opacity: 0.6 },
   sectionLink: { fontSize: 12, fontWeight: '700' },
-  videoCard: { width: CARD_WIDTH },
-  videoThumbContainer: { height: 130, position: 'relative', marginBottom: 8 },
+  videoRow: { flexDirection: 'row', gap: 12 },
+  videoThumbContainer: { width: 140, height: 90, position: 'relative', flexShrink: 0 },
   videoThumb: { width: '100%', height: '100%' },
+  videoInfo: { flex: 1, justifyContent: 'center' },
   videoOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.1)',
@@ -212,18 +210,11 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 16,
   },
-  videoPlaceholderText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
-  },
   playCircle: {
     position: 'absolute',
     alignSelf: 'center',
     top: '50%',
-    marginTop: -20,
+    marginTop: -16,
     alignItems: 'center',
     justifyContent: 'center',
   },

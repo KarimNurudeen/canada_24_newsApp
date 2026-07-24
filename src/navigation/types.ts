@@ -10,10 +10,10 @@ export type RootStackParamList = {
   AlertSetup: undefined;
   Main: undefined;
   ManageRegions: undefined;
-  Settings: undefined;
   ArticleDetail: { article: Article };
   VideoPlayer: { item: VideoItem };
-  Search: undefined;
+  LocalNews: { region?: string } | undefined;
+  SavedStories: undefined;
   SectionDetail: { section: string };
   CreatePost: undefined;
 };

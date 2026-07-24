@@ -1,13 +1,18 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   StatusBar, ActivityIndicator, Dimensions, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Video, ResizeMode, type AVPlaybackStatus } from 'expo-av';
+import { WebView } from 'react-native-webview';
+import YoutubePlayer from 'react-native-youtube-iframe';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute, type RouteProp, type NavigationProp } from '@react-navigation/native';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
+import { useInteractions } from '../context/InteractionsContext';
+import { requireAuth } from '../utils/requireAuth';
 import type { RootStackParamList } from '../navigation/types';
 
 type VideoPlayerRouteProp = RouteProp<RootStackParamList, 'VideoPlayer'>;
@@ -20,12 +25,34 @@ const SAMPLE_VIDEOS: Record<string, string> = {
 
 const { width } = Dimensions.get('window');
 
+// The backend never sets a direct playable video_url for YouTube/TikTok-sourced
+// videos (there isn't one to give — YouTube/TikTok don't expose raw file URLs).
+// Those only ever carry a source_url pointing at the watch/share page, which a
+// native <Video> player can't open. YouTube goes through react-native-youtube-iframe
+// (a raw WebView iframe embed renders a blank/black box — Google's embedded player
+// silently refuses to paint without the IFrame Player API handshake this library
+// does for you); TikTok, lacking an equivalent RN library, uses a plain WebView
+// embed. Direct file uploads (NewsVideo) keep using the native <Video> player.
+function extractYouTubeId(url?: string): string | null {
+  if (!url) return null;
+  const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{6,})/);
+  return match ? match[1] : null;
+}
+
+function extractTikTokVideoId(url?: string): string | null {
+  if (!url) return null;
+  const match = url.match(/tiktok\.com\/@[^/]+\/video\/(\d+)/);
+  return match ? match[1] : null;
+}
+
 export default function VideoPlayerScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const route = useRoute<VideoPlayerRouteProp>();
   const { item } = route.params;
   const sourceUrl = item.sourceUrl;
   const { colors } = useApp();
+  const { user } = useAuth();
+  const { hydrateVideoInteractions, isReposted, getRepostCount, toggleRepost } = useInteractions();
   const videoRef = useRef<Video>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -33,7 +60,23 @@ export default function VideoPlayerScreen() {
   const [status, setStatus] = useState<AVPlaybackStatus | null>(null);
   const hasDirectVideo = Boolean(item.videoUrl);
 
+  const youtubeId = hasDirectVideo ? null : extractYouTubeId(sourceUrl);
+  const tiktokId = hasDirectVideo ? null : extractTikTokVideoId(sourceUrl);
+  const tiktokEmbedUrl = tiktokId ? `https://www.tiktok.com/embed/v2/${tiktokId}` : null;
+  const usesYoutube = Boolean(youtubeId);
+  const usesTikTok = Boolean(tiktokEmbedUrl);
+  const usesEmbed = usesYoutube || usesTikTok;
+  const [ytPlaying, setYtPlaying] = useState(true);
+
   const videoUrl = item.videoUrl || SAMPLE_VIDEOS[item.isLive ? 'live' : 'news'];
+
+  useEffect(() => {
+    hydrateVideoInteractions(item);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.id]);
+
+  const reposted = isReposted(item.id) ?? item.isReposted ?? false;
+  const repostCount = getRepostCount(item.id) ?? item.repostsCount ?? 0;
 
   const isPlaying = status?.isLoaded ? status.isPlaying : false;
   const durationMs = status?.isLoaded ? (status.durationMillis ?? 0) : 0;
@@ -72,6 +115,29 @@ export default function VideoPlayerScreen() {
             <MaterialIcons name="error-outline" size={48} color="#1976D2" />
             <Text style={styles.errorText}>Unable to load video.{'\n'}Check your connection and try again.</Text>
           </View>
+        ) : usesYoutube ? (
+          <YoutubePlayer
+            height={width * 0.5625}
+            width={width}
+            videoId={youtubeId!}
+            play={ytPlaying}
+            onChangeState={(state: string) => {
+              if (state === 'playing' || state === 'video_cued') setLoading(false);
+            }}
+            onError={() => { setLoading(false); setError(true); }}
+          />
+        ) : usesTikTok ? (
+          <WebView
+            source={{ uri: tiktokEmbedUrl! }}
+            style={styles.video}
+            allowsInlineMediaPlayback
+            mediaPlaybackRequiresUserAction={false}
+            javaScriptEnabled
+            domStorageEnabled
+            onLoadEnd={() => setLoading(false)}
+            onError={() => { setLoading(false); setError(true); }}
+            onHttpError={() => { setLoading(false); setError(true); }}
+          />
         ) : (
           <Video
             ref={videoRef}
@@ -90,7 +156,7 @@ export default function VideoPlayerScreen() {
       </View>
 
       {/* Progress bar (when not using native controls) */}
-      {!error && (
+      {!error && !usesEmbed && (
         <View style={styles.progressBar}>
           <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
         </View>
@@ -98,9 +164,20 @@ export default function VideoPlayerScreen() {
 
       {/* Info panel */}
       <View style={[styles.infoPanel, { backgroundColor: colors.surface }]}>
-        <Text style={[styles.infoTitle, { color: colors.primaryText }]} numberOfLines={2}>
-          {item.title}
-        </Text>
+        <View style={styles.infoTitleRow}>
+          <Text style={[styles.infoTitle, { color: colors.primaryText, flex: 1 }]} numberOfLines={2}>
+            {item.title}
+          </Text>
+          <TouchableOpacity
+            style={styles.repostBtn}
+            onPress={() => requireAuth(user, navigation, () => toggleRepost(item.id, reposted))}
+            activeOpacity={0.75}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <MaterialIcons name="repeat" size={20} color={reposted ? '#2E7D32' : colors.primaryText} />
+            <Text style={[styles.repostCount, { color: reposted ? '#2E7D32' : colors.primaryText }]}>{repostCount}</Text>
+          </TouchableOpacity>
+        </View>
         <View style={styles.infoMeta}>
           <Text style={[styles.infoDate, { color: colors.primary }]}>{item.date}</Text>
           {item.duration && (
@@ -116,7 +193,7 @@ export default function VideoPlayerScreen() {
           </Text>
         ) : null}
 
-        {!hasDirectVideo ? (
+        {!hasDirectVideo && !usesEmbed ? (
           <View style={styles.noticeBox}>
             <Text style={styles.noticeText}>
               Demo playback only. This story does not have a real video stream URL configured yet.
@@ -129,7 +206,8 @@ export default function VideoPlayerScreen() {
           </View>
         ) : null}
 
-        {/* Controls row */}
+        {/* Controls row — the embedded YouTube/TikTok player has its own controls */}
+        {!usesEmbed && (
         <View style={styles.controls}>
           <TouchableOpacity
             style={[styles.controlBtn, { backgroundColor: colors.primary }]}
@@ -163,6 +241,7 @@ export default function VideoPlayerScreen() {
             <MaterialIcons name="forward-10" size={24} color={colors.primaryText} />
           </TouchableOpacity>
         </View>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -217,10 +296,25 @@ const styles = StyleSheet.create({
     padding: 20,
     gap: 8,
   },
+  infoTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
   infoTitle: {
     fontFamily: 'BebasNeue_400Regular',
     fontSize: 22,
     lineHeight: 24,
+  },
+  repostBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingTop: 2,
+  },
+  repostCount: {
+    fontSize: 13,
+    fontWeight: '700',
   },
   infoMeta: {
     flexDirection: 'row',

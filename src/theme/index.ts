@@ -41,6 +41,21 @@ export const Spacing = {
   xl: 64,
 };
 
+export const Radius = {
+  sm: 8,
+  md: 14,
+  lg: 20,
+  pill: 999,
+};
+
+export const SoftShadow = {
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.08,
+  shadowRadius: 12,
+  elevation: 3,
+};
+
 export const Fonts = {
   bebasNeue: 'BebasNeue_400Regular',
   interRegular: 'System',

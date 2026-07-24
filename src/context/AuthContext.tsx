@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Alert, Platform } from 'react-native';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
-import { apiRequest } from '../services/api';
+import { API_BASE_URL, apiRequest } from '../services/api';
 import { CATEGORY_CODES } from '../config/content';
 import { useApp, type ServerAlertPreferences, type ServerRegion } from './AppContext';
 import { mapBackendArticle, mapBackendUserPost } from '../services/newsService';
@@ -36,6 +36,7 @@ export interface UserPost {
   status: UserPostStatus;
   authorEmail: string;
   authorName: string;
+  authorAvatar?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -47,6 +48,12 @@ type BackendAuthUser = {
   avatar: string;
   bio: string;
   joined_at: string;
+};
+
+type BackendProfileUpdate = {
+  display_name: string;
+  avatar: string;
+  bio: string;
 };
 
 type BackendUserPost = {
@@ -61,6 +68,7 @@ type BackendUserPost = {
   time: string;
   author_name: string;
   author_email: string;
+  author_avatar: string;
 };
 
 type VerifyOtpResponse = {
@@ -93,6 +101,7 @@ type BackendArticle = {
   img_url: string;
   source_url: string;
   author: string;
+  author_avatar: string;
   published_at: string;
   time: string;
   is_live: boolean;
@@ -121,6 +130,7 @@ type CreatePostInput = {
   body: string;
   category: string;
   imgUrl?: string;
+  regionSlugs?: string[];
 };
 
 function toCategoryCode(label: string): string {
@@ -135,6 +145,7 @@ interface AuthContextType {
   verifyOTP: (email: string, code: string) => Promise<boolean>;
   signOut: () => Promise<void>;
   addPost: (post: CreatePostInput) => Promise<UserPost>;
+  updateAvatar: (localUri: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -151,7 +162,7 @@ function mapBackendUser(user: BackendAuthUser): AuthUser {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { hydrateServerState, clearServerState } = useApp();
+  const { hydrateServerState, clearServerState, selectedRegions, pushRegionsToServer } = useApp();
   const [session, setSession] = useState<StoredSession | null>(null);
   const [userPosts, setUserPosts] = useState<UserPost[]>([]);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
@@ -173,12 +184,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     await persistSession(resolvedSession);
+    const serverRegionNames = data.regions.map(item => item.name);
     hydrateServerState({
-      regionNames: data.regions.map(item => item.name),
+      regionNames: serverRegionNames,
       alerts: data.alerts,
       savedArticles: data.saved_articles.map(mapBackendArticle),
     });
     setUserPosts(data.my_posts.map(mapBackendUserPost));
+
+    // First login/signup: if the server has no saved regions yet but the user
+    // already picked some locally during onboarding, push that selection up
+    // instead of leaving it stranded on-device only.
+    if (serverRegionNames.length === 0 && selectedRegions.length > 0) {
+      void pushRegionsToServer(resolvedSession, selectedRegions);
+    }
 
     // Register Expo push token silently after login
     void registerPushToken(resolvedSession);
@@ -290,6 +309,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         body: post.body.trim(),
         category: toCategoryCode(post.category),
         img_url: post.imgUrl?.trim() || '',
+        regions: post.regionSlugs ?? [],
       }),
     });
 
@@ -302,6 +322,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return createdPost;
   };
 
+  const updateAvatar = async (localUri: string): Promise<void> => {
+    const currentSession = (await readStoredSession<StoredSession>()) ?? session;
+    if (!currentSession) {
+      throw new Error('Authentication required');
+    }
+
+    const filename = localUri.split('/').pop() ?? 'avatar.jpg';
+    const ext = filename.split('.').pop()?.toLowerCase() ?? 'jpg';
+    const mime = ext === 'png' ? 'image/png' : ext === 'gif' ? 'image/gif' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+
+    const form = new FormData();
+    form.append('image', { uri: localUri, name: filename, type: mime } as unknown as Blob);
+
+    const uploadResponse = await fetch(`${API_BASE_URL}/news/upload-image/`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${currentSession.accessToken}` },
+      body: form,
+    });
+    if (!uploadResponse.ok) {
+      const err = await uploadResponse.json().catch(() => ({}));
+      throw new Error((err as { detail?: string }).detail ?? 'Avatar upload failed');
+    }
+    const { url } = (await uploadResponse.json()) as { url: string };
+
+    const { data, session: nextSession } = await requestWithStoredSession<BackendProfileUpdate, StoredSession>(
+      currentSession,
+      '/auth/me/',
+      { method: 'PATCH', body: JSON.stringify({ avatar: url }) },
+    );
+
+    const updatedUser: AuthUser = {
+      ...currentSession.user,
+      displayName: data.display_name,
+      avatar: data.avatar || undefined,
+      bio: data.bio || undefined,
+    };
+    await persistSession({ ...nextSession, user: updatedUser });
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -312,6 +371,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         verifyOTP,
         signOut,
         addPost,
+        updateAvatar,
       }}
     >
       {children}

@@ -5,6 +5,7 @@ import { readStoredSession, requestWithStoredSession } from '../services/session
 import { playReactionFeedback } from '../services/notificationService';
 import type { Article } from './AppContext';
 import type { AuthUser } from './AuthContext';
+import type { VideoItem } from '../types/video';
 
 const REACTIONS_KEY = '@canada247_reactions';
 const COMMENTS_KEY = '@canada247_comments';
@@ -55,6 +56,7 @@ interface InteractionsState {
 
 interface InteractionsContextType {
   hydrateArticleInteractions: (article: Article) => Promise<void>;
+  hydrateVideoInteractions: (video: VideoItem) => void;
   getReaction: (articleId: string) => Reaction | undefined;
   getComments: (articleId: string) => Comment[];
   getCommentCount: (articleId: string) => number | undefined;
@@ -72,6 +74,10 @@ const InteractionsContext = createContext<InteractionsContextType | null>(null);
 
 function isBackendArticleId(articleId: string): boolean {
   return /^\d+$/.test(articleId);
+}
+
+function isVideoKey(id: string): boolean {
+  return /^(uploaded|external)-video-\d+$/.test(id);
 }
 
 function mapBackendComment(comment: BackendComment): Comment {
@@ -176,6 +182,20 @@ export function InteractionsProvider({ children }: { children: React.ReactNode }
         repostCounts: { ...current.repostCounts, [article.id]: summary.reposts },
       }));
     } catch {}
+  };
+
+  const hydrateVideoInteractions = (video: VideoItem) => {
+    setState(current => ({
+      ...current,
+      reposts: {
+        ...current.reposts,
+        [video.id]: current.reposts[video.id] ?? Boolean(video.isReposted),
+      },
+      repostCounts: {
+        ...current.repostCounts,
+        [video.id]: current.repostCounts[video.id] ?? video.repostsCount ?? 0,
+      },
+    }));
   };
 
   const getReaction = (articleId: string): Reaction | undefined => state.reactions[articleId];
@@ -331,14 +351,18 @@ export function InteractionsProvider({ children }: { children: React.ReactNode }
       },
     }));
 
-    if (!isBackendArticleId(articleId)) return;
+    if (!isBackendArticleId(articleId) && !isVideoKey(articleId)) return;
+
+    const repostPath = isVideoKey(articleId)
+      ? `/interactions/videos/${articleId}/repost/`
+      : `/interactions/articles/${articleId}/repost/`;
 
     void (async () => {
       const session = await readStoredSession();
       if (!session) return;
 
       try {
-        const { data } = await requestWithStoredSession<RepostSummary>(session, `/interactions/articles/${articleId}/repost/`, {
+        const { data } = await requestWithStoredSession<RepostSummary>(session, repostPath, {
           method: 'POST',
         });
         setState(current => ({
@@ -354,6 +378,7 @@ export function InteractionsProvider({ children }: { children: React.ReactNode }
     <InteractionsContext.Provider
       value={{
         hydrateArticleInteractions,
+        hydrateVideoInteractions,
         getReaction,
         getComments,
         getCommentCount,

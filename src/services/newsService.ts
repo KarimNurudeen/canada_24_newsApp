@@ -13,6 +13,7 @@ type BackendArticle = {
   img_url: string;
   source_url: string;
   author: string;
+  author_avatar: string;
   published_at: string;
   time: string;
   is_live: boolean;
@@ -42,6 +43,7 @@ type BackendUserPost = {
   time: string;
   author_name: string;
   author_email: string;
+  author_avatar: string;
 };
 
 type BackendSection = {
@@ -63,6 +65,8 @@ type BackendVideoItem = {
   live_text: string;
   source_url?: string;
   video_url?: string;
+  reposts_count?: number;
+  is_reposted?: boolean;
 };
 
 type BackendVideoFeed = {
@@ -93,6 +97,7 @@ export function mapBackendArticle(article: BackendArticle): Article {
     isUpdated: article.is_updated,
     body: article.body || undefined,
     author: article.author || undefined,
+    authorAvatar: article.author_avatar || undefined,
     sourceUrl: article.source_url || undefined,
     publishedAt: article.published_at,
     feedKey: article.feed_key || undefined,
@@ -121,6 +126,7 @@ export function mapBackendUserPost(post: BackendUserPost): UserPost {
     status: post.status,
     authorEmail: post.author_email,
     authorName: post.author_name,
+    authorAvatar: post.author_avatar || undefined,
     createdAt: post.created_at,
     updatedAt: post.updated_at,
   };
@@ -139,6 +145,8 @@ function mapBackendVideoItem(item: BackendVideoItem): VideoItem {
     liveText: item.live_text || undefined,
     sourceUrl: item.source_url || undefined,
     videoUrl: item.video_url || undefined,
+    repostsCount: item.reposts_count ?? 0,
+    isReposted: item.is_reposted ?? false,
   };
 }
 

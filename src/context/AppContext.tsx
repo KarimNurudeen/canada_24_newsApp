@@ -6,7 +6,7 @@ import { Colors } from '../theme';
 import { playReactionFeedback, showNewContentNotification } from '../services/notificationService';
 import { fetchCommunityStories, fetchTopStories } from '../services/newsService';
 import { apiRequest } from '../services/api';
-import { readStoredSession, requestWithStoredSession } from '../services/sessionService';
+import { readStoredSession, requestWithStoredSession, type StoredSessionRecord } from '../services/sessionService';
 import { createWebSocket } from '../services/wsService';
 import { mapBackendArticle } from '../services/newsService';
 
@@ -21,6 +21,7 @@ export interface Article {
   isUpdated?: boolean;
   body?: string;
   author?: string;
+  authorAvatar?: string;
   sourceUrl?: string;
   publishedAt?: string;
   feedKey?: string;
@@ -97,6 +98,7 @@ interface AppContextType extends AppState {
     savedArticles?: Article[];
   }) => void;
   clearServerState: () => void;
+  pushRegionsToServer: (session: StoredSessionRecord, regionNames: string[]) => Promise<void>;
   colors: typeof Colors.light;
 }
 
@@ -236,7 +238,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }) => {
     setState(current => ({
       ...current,
-      selectedRegions: payload.regionNames ?? current.selectedRegions,
+      // An empty server list on a fresh signup shouldn't wipe out regions the
+      // user already picked locally during onboarding (before they had a session) —
+      // only trust the server's list once it actually has something in it.
+      selectedRegions: payload.regionNames && payload.regionNames.length > 0
+        ? payload.regionNames
+        : current.selectedRegions,
       alerts: payload.alerts ? mergeServerAlerts(current.alerts, payload.alerts) : current.alerts,
       savedArticles: payload.savedArticles ?? current.savedArticles,
     }));
@@ -249,6 +256,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
   };
 
+  const pushRegionsToServer = async (session: StoredSessionRecord, regionNames: string[]) => {
+    if (!ENABLE_MANAGE_REGIONS || regionCatalog.length === 0) return;
+
+    const regionSlugs = regionCatalog
+      .filter(item => regionNames.includes(item.name))
+      .map(item => item.slug);
+
+    try {
+      const { data } = await requestWithStoredSession<RegionUpdateResponse>(session, '/regions/me/', {
+        method: 'PUT',
+        body: JSON.stringify({ regions: regionSlugs }),
+      });
+      update({ selectedRegions: data.regions.map(item => item.name) });
+    } catch {}
+  };
+
   const toggleRegion = (region: string) => {
     const next = state.selectedRegions.includes(region)
       ? state.selectedRegions.filter(item => item !== region)
@@ -257,22 +280,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     update({ selectedRegions: next });
 
     void (async () => {
-      if (!ENABLE_MANAGE_REGIONS) return;
-
       const session = await readStoredSession();
-      if (!session || regionCatalog.length === 0) return;
-
-      const regionSlugs = regionCatalog
-        .filter(item => next.includes(item.name))
-        .map(item => item.slug);
-
-      try {
-        const { data } = await requestWithStoredSession<RegionUpdateResponse>(session, '/regions/me/', {
-          method: 'PUT',
-          body: JSON.stringify({ regions: regionSlugs }),
-        });
-        update({ selectedRegions: data.regions.map(item => item.name) });
-      } catch {}
+      if (!session) return;
+      await pushRegionsToServer(session, next);
     })();
   };
 
@@ -354,6 +364,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         completeOnboarding: () => update({ onboardingComplete: true }),
         hydrateServerState,
         clearServerState,
+        pushRegionsToServer,
       }}
     >
       {children}
