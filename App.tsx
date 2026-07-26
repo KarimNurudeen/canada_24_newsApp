@@ -21,6 +21,8 @@ import LocalNewsScreen from './src/screens/LocalNewsScreen';
 import SavedScreen from './src/screens/SavedScreen';
 import SectionDetailScreen from './src/screens/SectionDetailScreen';
 import CreatePostScreen from './src/screens/CreatePostScreen';
+import PrivacyPolicyScreen from './src/screens/PrivacyPolicyScreen';
+import TermsOfServiceScreen from './src/screens/TermsOfServiceScreen';
 import LaunchScreen from './src/screens/LaunchScreen';
 import MainTabs from './src/navigation/MainTabs';
 import { setupNotificationHandler, createAndroidChannels } from './src/services/notificationService';
@@ -61,6 +63,8 @@ function AppNavigator() {
       <Stack.Screen name="LocalNews" component={LocalNewsScreen} />
       <Stack.Screen name="SavedStories" component={SavedScreen} />
       <Stack.Screen name="SectionDetail" component={SectionDetailScreen} />
+      <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
+      <Stack.Screen name="TermsOfService" component={TermsOfServiceScreen} />
       {ENABLE_USER_POST_CREATION ? (
         <Stack.Screen name="CreatePost" component={CreatePostScreen} options={{ animation: 'slide_from_bottom' }} />
       ) : null}

@@ -22,7 +22,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.canadainrealtime"
+      "package": "com.canada247.app"
     },
     "web": {
       "favicon": "./assets/favicon.png"

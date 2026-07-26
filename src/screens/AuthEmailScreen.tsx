@@ -117,7 +117,14 @@ export default function AuthEmailScreen() {
           </TouchableOpacity>
 
           <Text style={[styles.disclaimer, { color: colors.hint }]}>
-            By continuing, you agree to Canada In Real Time's Terms of Service and Privacy Policy.
+            By continuing, you agree to Canada In Real Time's{' '}
+            <Text style={[styles.disclaimerLink, { color: colors.primary }]} onPress={() => navigation.navigate('TermsOfService')}>
+              Terms of Service
+            </Text>{' '}
+            and{' '}
+            <Text style={[styles.disclaimerLink, { color: colors.primary }]} onPress={() => navigation.navigate('PrivacyPolicy')}>
+              Privacy Policy
+            </Text>.
           </Text>
         </View>
       </KeyboardAvoidingView>
@@ -214,5 +221,9 @@ const styles = StyleSheet.create({
     marginTop: 20,
     lineHeight: 16,
     paddingHorizontal: 16,
+  },
+  disclaimerLink: {
+    fontWeight: '700',
+    textDecorationLine: 'underline',
   },
 });

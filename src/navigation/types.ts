@@ -16,4 +16,6 @@ export type RootStackParamList = {
   SavedStories: undefined;
   SectionDetail: { section: string };
   CreatePost: undefined;
+  PrivacyPolicy: undefined;
+  TermsOfService: undefined;
 };

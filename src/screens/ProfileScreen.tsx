@@ -216,6 +216,12 @@ export default function ProfileScreen() {
         <LinkRow title="About Canada 24/7" icon="info-outline" colors={colors} onPress={() => setAboutVisible(true)} />
       </View>
 
+      <SectionHead title="LEGAL" colors={colors} />
+      <View style={styles.group}>
+        <LinkRow title="Privacy Policy" icon="privacy-tip" colors={colors} onPress={() => navigation.navigate('PrivacyPolicy')} />
+        <LinkRow title="Terms of Service" icon="description" colors={colors} onPress={() => navigation.navigate('TermsOfService')} />
+      </View>
+
       <Modal visible={aboutVisible} transparent animationType="fade" onRequestClose={() => setAboutVisible(false)}>
         <TouchableOpacity style={styles.aboutBackdrop} activeOpacity={1} onPress={() => setAboutVisible(false)}>
           <TouchableOpacity activeOpacity={1} style={[styles.aboutCard, { backgroundColor: colors.background }, SoftShadow]}>
