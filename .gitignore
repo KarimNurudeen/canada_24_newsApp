@@ -52,3 +52,6 @@ backend/db.sqlite3
 
 # Google Play service account key for `eas submit` — secret, never commit
 /play-service-account.json
+
+# EAS local credentials — contains keystore passwords in plain text
+/credentials.json
