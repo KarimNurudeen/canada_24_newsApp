@@ -11,7 +11,7 @@
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/0c38bf09-058c-41c5-aa26-b03737ac7093"
+      "url": "https://u.expo.dev/74354c43-281f-44ac-98ac-97972e49e65d"
     },
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -34,11 +34,6 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "extra": {
-      "eas": {
-        "projectId": "0c38bf09-058c-41c5-aa26-b03737ac7093"
-      }
-    },
     "plugins": [
       [
         "expo-font",
@@ -48,6 +43,12 @@
           ]
         }
       ]
-    ]
+    ],
+    "owner": "litcodes-team",
+    "extra": {
+      "eas": {
+        "projectId": "74354c43-281f-44ac-98ac-97972e49e65d"
+      }
+    }
   }
 }
