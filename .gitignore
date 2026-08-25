@@ -39,6 +39,9 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Android release signing key — never commit, back up outside this repo
+/keystore/
 # Python backend
 __pycache__/
 *.py[cod]
@@ -46,3 +49,6 @@ backend/.env
 backend/db.sqlite3
 .pytest_cache/
 
+
+# Google Play service account key for `eas submit` — secret, never commit
+/play-service-account.json
