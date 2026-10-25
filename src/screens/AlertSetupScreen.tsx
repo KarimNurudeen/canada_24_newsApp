@@ -1,13 +1,14 @@
 import React, { useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, Switch, StatusBar,
+  ScrollView, StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, CommonActions } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ALERT_DEFINITIONS } from '../config/content';
+import NeoSwitch from '../components/NeoSwitch';
 import { useApp } from '../context/AppContext';
 import { scheduleAlertNotification } from '../services/notificationService';
 import type { RootStackParamList } from '../navigation/types';
@@ -24,13 +25,7 @@ function AlertToggleRow({ label, active, onToggle, colors }: {
   return (
     <View style={[styles.toggleRow, { borderBottomColor: colors.divider + '20' }]}>
       <Text style={[styles.toggleLabel, { color: colors.primaryText }]}>{label}</Text>
-      <Switch
-        value={active}
-        onValueChange={onToggle}
-        trackColor={{ false: '#ccc', true: colors.primary }}
-        thumbColor="#fff"
-        ios_backgroundColor="#ccc"
-      />
+      <NeoSwitch value={active} onValueChange={onToggle} accessibilityLabel={label} />
     </View>
   );
 }

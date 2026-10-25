@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity,
+  View, Text, ScrollView, TouchableOpacity, Modal, Pressable,
   StyleSheet, FlatList, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,167 +9,192 @@ import { useNavigation, useRoute, type RouteProp } from '@react-navigation/nativ
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import ArticleRow from '../components/ArticleRow';
 import { useApp } from '../context/AppContext';
-import { fetchLocalNews } from '../services/newsService';
+import { fetchTopStories, fetchRegions, fetchRegionArticles, slugifyValue } from '../services/newsService';
 import type { Article } from '../context/AppContext';
 import type { RootStackParamList } from '../navigation/types';
 
 type LocalNewsRouteProp = RouteProp<RootStackParamList, 'LocalNews'>;
+type SortMode = 'recent' | 'oldest' | 'popular';
+type Tab = { slug: string; name: string };
 
+const ALL_CANADA: Tab = { slug: 'all', name: 'All Canada' };
+
+const SORT_OPTIONS: { mode: SortMode; label: string }[] = [
+  { mode: 'recent', label: 'Most Recent' },
+  { mode: 'oldest', label: 'Oldest First' },
+  { mode: 'popular', label: 'Most Popular' },
+];
+
+function engagement(a: Article): number {
+  return (a.likesCount ?? 0) + (a.commentsCount ?? 0) + (a.repostsCount ?? 0) + (a.savesCount ?? 0);
+}
+
+function time(a: Article): number {
+  return new Date(a.publishedAt ?? 0).getTime();
+}
+
+/** "Across Canada": national news plus one tab per region that currently has
+ * news. A region tab appears as soon as stories tagged to it exist. */
 export default function LocalNewsScreen() {
-  const { colors, availableRegions, selectedRegions } = useApp();
+  const { colors } = useApp();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<LocalNewsRouteProp>();
   const insets = useSafeAreaInsets();
-  const regionTabs = ['All Regions', ...(selectedRegions.length > 0 ? selectedRegions : availableRegions)];
-  const [activeCity, setActiveCity] = useState(route.params?.region ?? 'All Regions');
-  const [sortMode, setSortMode] = useState<'editors' | 'time'>('editors');
-  const [articles, setArticles] = useState<Article[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!regionTabs.includes(activeCity)) {
-      setActiveCity(regionTabs[0] ?? 'All Regions');
-    }
-  }, [activeCity, regionTabs]);
+  const [tabs, setTabs] = useState<Tab[]>([ALL_CANADA]);
+  const [byTab, setByTab] = useState<Record<string, Article[]>>({});
+  const [activeSlug, setActiveSlug] = useState(ALL_CANADA.slug);
+  const [loading, setLoading] = useState(true);
+  const [sortMode, setSortMode] = useState<SortMode>('recent');
+  const [filterOpen, setFilterOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-
     (async () => {
-      setLoading(true);
-      try {
-        const data = await fetchLocalNews(activeCity === 'All Regions' ? undefined : activeCity);
-        if (!cancelled) {
-          setArticles(data);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
+      const [national, regions] = await Promise.all([fetchTopStories(), fetchRegions()]);
+      const results = await Promise.all(
+        regions.map(async region => [region, await fetchRegionArticles(region.slug)] as const),
+      );
+      if (cancelled) return;
+      const withNews = results.filter(([, list]) => list.length > 0);
+      setTabs([ALL_CANADA, ...withNews.map(([r]) => ({ slug: r.slug, name: r.name }))]);
+      setByTab({
+        [ALL_CANADA.slug]: national,
+        ...Object.fromEntries(withNews.map(([r, list]) => [r.slug, list])),
+      });
+      // Open on the region the user came from, if it has news.
+      const requested = route.params?.region ? slugifyValue(route.params.region) : null;
+      if (requested && withNews.some(([r]) => r.slug === requested)) setActiveSlug(requested);
+      setLoading(false);
     })();
+    return () => { cancelled = true; };
+  }, [route.params?.region]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [activeCity]);
+  const activeName = tabs.find(t => t.slug === activeSlug)?.name ?? ALL_CANADA.name;
 
-  const sortedArticles = [...articles].sort((a, b) => {
-    if (sortMode === 'editors') {
-      return Number(Boolean(b.isUpdated || b.isLive)) - Number(Boolean(a.isUpdated || a.isLive));
-    }
-    return 0;
-  });
+  const sorted = useMemo(() => {
+    const list = [...(byTab[activeSlug] ?? [])];
+    return list.sort((a, b) => {
+      if (sortMode === 'oldest') return time(a) - time(b);
+      if (sortMode === 'popular') return engagement(b) - engagement(a) || time(b) - time(a);
+      return time(b) - time(a);
+    });
+  }, [byTab, activeSlug, sortMode]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
-      {/* Back header */}
-      <View style={[styles.backHeader, { paddingTop: insets.top + 8, backgroundColor: colors.background }]}>
+    <View style={{ flex: 1, backgroundColor: colors.canvas }}>
+      <View style={[styles.backHeader, { paddingTop: insets.top + 8, backgroundColor: colors.chrome }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <MaterialIcons name="arrow-back" size={24} color={colors.primaryText} />
         </TouchableOpacity>
-        <Text style={[styles.backHeaderTitle, { color: colors.primaryText }]}>Local News</Text>
+        <Text style={[styles.backHeaderTitle, { color: colors.primaryText }]}>Across Canada</Text>
         <View style={{ width: 24 }} />
       </View>
 
-      {/* City tabs */}
+      {/* Region tabs — only regions that have news */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         style={{ flexGrow: 0, backgroundColor: colors.primary }}
         contentContainerStyle={{ paddingHorizontal: 4 }}
       >
-        {regionTabs.map(city => {
-          const isActive = city === activeCity;
+        {tabs.map(tab => {
+          const isActive = tab.slug === activeSlug;
           return (
             <TouchableOpacity
-              key={city}
-              onPress={() => setActiveCity(city)}
-              style={[
-                styles.cityTab,
-                { borderBottomColor: isActive ? '#fff' : 'transparent' },
-              ]}
+              key={tab.slug}
+              onPress={() => setActiveSlug(tab.slug)}
+              style={[styles.cityTab, { borderBottomColor: isActive ? '#fff' : 'transparent' }]}
               activeOpacity={0.8}
             >
-              <Text style={[
-                styles.cityTabText,
-                { color: isActive ? '#fff' : 'rgba(255,255,255,0.65)' },
-              ]}>{city}</Text>
+              <Text style={[styles.cityTabText, { color: isActive ? '#fff' : 'rgba(255,255,255,0.65)' }]}>
+                {tab.name}
+              </Text>
             </TouchableOpacity>
           );
         })}
       </ScrollView>
 
-      {/* Sort bar */}
-      <View style={[styles.sortBar, { backgroundColor: colors.surface, borderBottomColor: colors.divider + '30' }]}>
-        {(['editors', 'time'] as const).map(mode => (
-          <TouchableOpacity
-            key={mode}
-            onPress={() => setSortMode(mode)}
-            style={[
-              styles.sortBtn,
-              {
-                borderBottomWidth: 3,
-                borderBottomColor: sortMode === mode ? colors.primary : 'transparent',
-              },
-            ]}
-          >
-            <Text style={[
-              styles.sortBtnText,
-              { color: sortMode === mode ? colors.primary : colors.primaryText, opacity: sortMode === mode ? 1 : 0.55 },
-            ]}>
-              {mode === 'editors' ? "Editors' Picks" : 'By Time'}
-            </Text>
-          </TouchableOpacity>
-        ))}
+      {/* Filter menu */}
+      <View style={[styles.filterBar, { backgroundColor: colors.surface, borderBottomColor: colors.divider }]}>
+        <TouchableOpacity
+          onPress={() => setFilterOpen(true)}
+          style={[styles.filterBtn, { borderColor: colors.divider }]}
+          accessibilityLabel="Filter stories"
+          activeOpacity={0.8}
+        >
+          <MaterialIcons name="filter-list" size={18} color={colors.primary} />
+          <Text style={[styles.filterText, { color: colors.primaryText }]}>
+            {SORT_OPTIONS.find(o => o.mode === sortMode)?.label}
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Articles */}
       {loading ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={[styles.loadingText, { color: colors.primaryText }]}>Loading local news...</Text>
+          <Text style={[styles.loadingText, { color: colors.primaryText }]}>Loading news...</Text>
         </View>
       ) : (
-      <FlatList
-        data={sortedArticles}
-        keyExtractor={item => item.id}
-        contentContainerStyle={{ paddingHorizontal: 20 }}
-        ItemSeparatorComponent={() => <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: colors.divider }} />}
-        renderItem={({ item }) => <ArticleRow article={item} />}
-      />
+        <FlatList
+          data={sorted}
+          keyExtractor={item => item.id}
+          contentContainerStyle={{ paddingHorizontal: 20 }}
+          ListEmptyComponent={
+            <Text style={[styles.loadingText, { color: colors.primaryText, textAlign: 'center', paddingTop: 48 }]}>
+              No news available for {activeName} right now.
+            </Text>
+          }
+          renderItem={({ item }) => <ArticleRow article={item} />}
+        />
       )}
+
+      <Modal visible={filterOpen} transparent animationType="fade" onRequestClose={() => setFilterOpen(false)}>
+        <Pressable style={styles.backdrop} onPress={() => setFilterOpen(false)}>
+          <Pressable style={[styles.sheet, { backgroundColor: colors.surface }]}>
+            {SORT_OPTIONS.map(option => {
+              const active = option.mode === sortMode;
+              return (
+                <TouchableOpacity
+                  key={option.mode}
+                  onPress={() => { setSortMode(option.mode); setFilterOpen(false); }}
+                  style={[styles.option, { borderBottomColor: colors.divider }]}
+                >
+                  <Text style={[styles.optionText, { color: active ? colors.primary : colors.primaryText }, active && { fontWeight: '800' }]}>
+                    {option.label}
+                  </Text>
+                  {active ? <MaterialIcons name="check" size={18} color={colors.primary} /> : null}
+                </TouchableOpacity>
+              );
+            })}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   backHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingBottom: 12,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingBottom: 12,
   },
   backHeaderTitle: { fontSize: 17, fontWeight: '700' },
-  cityTab: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 3,
-  },
+  cityTab: { paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 3 },
   cityTabText: { fontSize: 13, fontWeight: '900' },
-  sortBar: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
+  filterBar: { flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth },
+  filterBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderWidth: 1, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8,
   },
-  sortBtn: { paddingVertical: 12, paddingHorizontal: 20 },
-  sortBtnText: { fontSize: 13, fontWeight: '900' },
-  loadingWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    padding: 32,
-  },
+  filterText: { fontSize: 13, fontWeight: '700' },
+  loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 32 },
   loadingText: { fontSize: 14, fontWeight: '600', opacity: 0.6 },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  sheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 24 },
+  option: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  optionText: { fontSize: 16, fontWeight: '600' },
 });

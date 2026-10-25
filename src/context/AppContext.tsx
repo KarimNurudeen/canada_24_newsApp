@@ -8,7 +8,17 @@ import { fetchCommunityStories, fetchTopStories } from '../services/newsService'
 import { apiRequest } from '../services/api';
 import { readStoredSession, requestWithStoredSession, type StoredSessionRecord } from '../services/sessionService';
 import { createWebSocket } from '../services/wsService';
+import { ENABLE_LIVE_NEWS_SOCKET } from '../config/features';
 import { mapBackendArticle } from '../services/newsService';
+
+export interface RelatedCoverageItem {
+  title: string;
+  url: string;
+  snippet: string;
+  sourceHostname: string;
+  sourceFavicon: string;
+  age: string;
+}
 
 export interface Article {
   id: string;
@@ -22,6 +32,11 @@ export interface Article {
   body?: string;
   author?: string;
   authorAvatar?: string;
+  readTimeMinutes?: number;
+  relatedCoverage?: RelatedCoverageItem[];
+  relatedCoverageStatus?: 'PENDING' | 'DONE' | 'FAILED' | string;
+  audioUrl?: string | null;
+  audioStatus?: string;
   sourceUrl?: string;
   publishedAt?: string;
   feedKey?: string;
@@ -193,7 +208,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Real-time news feed via WebSocket
   useEffect(() => {
-    if (!loaded || !state.onboardingComplete) return;
+    if (!ENABLE_LIVE_NEWS_SOCKET || !loaded || !state.onboardingComplete) return;
 
     const disconnect = createWebSocket('/ws/news/', (raw) => {
       try {

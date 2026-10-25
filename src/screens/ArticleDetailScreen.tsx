@@ -10,12 +10,21 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { EnrichedText } from 'react-native-enriched-html';
 import * as Speech from 'expo-speech';
+import { Audio } from 'expo-av';
+import { Linking } from 'react-native';
+import ArticleRow from '../components/ArticleRow';
 import * as Clipboard from 'expo-clipboard';
 import { Radius, SoftShadow } from '../theme';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { useInteractions } from '../context/InteractionsContext';
 import { requireAuth } from '../utils/requireAuth';
+import UserAvatar from '../components/UserAvatar';
+import ArticleImage from '../components/ArticleImage';
+import LikersSheet from '../components/LikersSheet';
+import { fetchLikers, fetchArticleById, timeAgo, type Liker } from '../services/socialService';
+import { ENABLE_SOCIAL_PROFILES } from '../config/features';
+import { bodyFontSize } from '../utils/textSize';
 import { stripHtml } from '../utils/stripHtml';
 import type { RootStackParamList } from '../navigation/types';
 
@@ -74,11 +83,38 @@ const waveStyles = StyleSheet.create({
   bar: { width: 3, height: 20, borderRadius: 2 },
 });
 
+function RailAction({ icon, label, active, activeColor = '#FF453A', onPress, accessibilityLabel }: {
+  icon: keyof typeof MaterialIcons.glyphMap; label?: string | number; active?: boolean;
+  activeColor?: string; onPress: () => void; accessibilityLabel: string;
+}) {
+  return (
+    <TouchableOpacity onPress={onPress} style={railStyles.item} activeOpacity={0.8} accessibilityLabel={accessibilityLabel}>
+      <View style={railStyles.bubble}>
+        <MaterialIcons name={icon} size={27} color={active ? activeColor : '#fff'} />
+      </View>
+      {label !== undefined ? <Text style={railStyles.label}>{label}</Text> : null}
+    </TouchableOpacity>
+  );
+}
+
+const railStyles = StyleSheet.create({
+  item: { alignItems: 'center' },
+  bubble: {
+    width: 46, height: 46, borderRadius: 23, backgroundColor: 'rgba(0,0,0,0.38)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  label: {
+    color: '#fff', fontSize: 12, fontWeight: '800', marginTop: 3,
+    textShadowColor: 'rgba(0,0,0,0.7)', textShadowRadius: 4, textShadowOffset: { width: 0, height: 1 },
+  },
+});
+
 export default function ArticleDetailScreen() {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const route = useRoute<ArticleDetailRouteProp>();
   const { article } = route.params;
-  const { colors, toggleSaveArticle, isArticleSaved } = useApp();
+  const { colors, toggleSaveArticle, isArticleSaved, topStories, communityStories, textScale } = useApp();
+  const bodySize = bodyFontSize(textScale);
   const { user } = useAuth();
   const {
     hydrateArticleInteractions,
@@ -92,13 +128,25 @@ export default function ArticleDetailScreen() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [likers, setLikers] = useState<{ count: number; likers: Liker[] }>({ count: 0, likers: [] });
+  const [likersOpen, setLikersOpen] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+  const soundRef = useRef<Audio.Sound | null>(null);
+  // Related coverage is enriched in the background on the server, so refetch while it is PENDING.
+  const [fresh, setFresh] = useState<{ related?: typeof article.relatedCoverage; status?: string; readTime?: number; audioUrl?: string | null; audioStatus?: string }>({});
 
   const rawBody: string | undefined = (article as any).body;
   const bodyText = rawBody ? [rawBody] : BODY_PARAGRAPHS;
 
   const fullText = [article.headline, ...(rawBody ? [stripHtml(rawBody)] : BODY_PARAGRAPHS)].join('. ');
   const authorTime = formatAuthorTime((article as any).publishedAt ?? (article as any).createdAt, article.time);
+
+  const moreInCategory = article.category
+    ? [...topStories, ...communityStories]
+        .filter(a => a.category === article.category && a.id !== article.id)
+        .filter((a, i, all) => all.findIndex(b => b.id === a.id) === i)
+        .slice(0, 4)
+    : [];
 
   const reaction = getReaction(article.id) ?? article.userReaction ?? null;
   const likeCount = getLikeCount(article.id) ?? article.likesCount ?? 0;
@@ -109,21 +157,83 @@ export default function ArticleDetailScreen() {
   const repostCount = getRepostCount(article.id) ?? article.repostsCount ?? 0;
 
   useEffect(() => {
-    return () => { Speech.stop(); };
+    return () => {
+      Speech.stop();
+      void soundRef.current?.unloadAsync();
+    };
   }, []);
+
+  // Pull the newest copy of this story (read time, audio, related coverage) and poll while coverage is pending.
+  useEffect(() => {
+    let cancelled = false;
+    let tries = 0;
+    const load = async () => {
+      const latest = await fetchArticleById(article.id);
+      if (cancelled || !latest) return;
+      setFresh({
+        related: latest.relatedCoverage,
+        status: latest.relatedCoverageStatus,
+        readTime: latest.readTimeMinutes,
+        audioUrl: latest.audioUrl,
+        audioStatus: latest.audioStatus,
+      });
+      if (latest.relatedCoverageStatus === 'PENDING' && tries++ < 8) setTimeout(load, 4000);
+    };
+    void load();
+    return () => { cancelled = true; };
+  }, [article.id]);
 
   useEffect(() => {
     void hydrateArticleInteractions(article);
   }, [article.id]);
 
+  // Who liked this story; refreshed whenever the viewer's own reaction changes.
+  useEffect(() => {
+    if (!ENABLE_SOCIAL_PROFILES) return; // needs the likers endpoint — see docs/BACKEND_DEPENDENCIES.md
+    let cancelled = false;
+    fetchLikers(article.id).then(result => { if (!cancelled) setLikers(result); });
+    return () => { cancelled = true; };
+  }, [article.id, reaction]);
+
+  const openProfile = (userId: string | number | undefined, name?: string, avatar?: string) => {
+    if (!ENABLE_SOCIAL_PROFILES || userId === undefined || userId === '') return;
+    navigation.navigate('PublicProfile', { userId: String(userId), name, avatar });
+  };
+
+  const audioUrl = fresh.audioUrl ?? article.audioUrl;
+  const audioStatus = fresh.audioStatus ?? article.audioStatus;
+
+  const handleStop = useCallback(async () => {
+    await Speech.stop();
+    await soundRef.current?.stopAsync().catch(() => {});
+    await soundRef.current?.unloadAsync().catch(() => {});
+    soundRef.current = null;
+    setIsSpeaking(false);
+  }, []);
+
+  // Prefer the server-generated narration; fall back to the phone's own voice.
   const handleListen = useCallback(async () => {
-    const speaking = await Speech.isSpeakingAsync();
-    if (speaking) {
-      await Speech.stop();
-      setIsSpeaking(false);
+    if (isSpeaking) {
+      await handleStop();
       return;
     }
     setIsSpeaking(true);
+    if (audioStatus === 'DONE' && audioUrl) {
+      try {
+        const { sound } = await Audio.Sound.createAsync({ uri: audioUrl }, { shouldPlay: true });
+        soundRef.current = sound;
+        sound.setOnPlaybackStatusUpdate(status => {
+          if (status.isLoaded && status.didJustFinish) {
+            setIsSpeaking(false);
+            void sound.unloadAsync();
+            soundRef.current = null;
+          }
+        });
+        return;
+      } catch {
+        // fall through to on-device speech
+      }
+    }
     Speech.speak(fullText, {
       language: 'en-CA',
       rate: 0.92,
@@ -132,12 +242,7 @@ export default function ArticleDetailScreen() {
       onStopped: () => setIsSpeaking(false),
       onError: () => setIsSpeaking(false),
     });
-  }, [fullText]);
-
-  const handleStop = useCallback(async () => {
-    await Speech.stop();
-    setIsSpeaking(false);
-  }, []);
+  }, [fullText, isSpeaking, audioStatus, audioUrl, handleStop]);
 
   const handleShare = async () => {
     setMenuOpen(false);
@@ -175,12 +280,13 @@ export default function ArticleDetailScreen() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView ref={scrollRef} contentContainerStyle={{ paddingBottom: isSpeaking ? 120 : 48 }}>
           {/* Hero image with overlaid header + headline */}
-          <View style={{ height: 320 }}>
+          <View style={{ height: 470 }}>
             {article.imgUrl ? (
-              <Image source={{ uri: article.imgUrl }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+              <ArticleImage uri={article.imgUrl} style={StyleSheet.absoluteFillObject} />
             ) : (
-              <View style={[StyleSheet.absoluteFillObject, { backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }]}>
-                <MaterialIcons name="article" size={48} color="#fff" />
+              // No picture: show the whole logo card above the headline instead of cropping it behind the text.
+              <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#0B2545' }]}>
+                <ArticleImage uri={undefined} resizeMode="contain" style={{ width: '100%', height: 250, marginTop: 64 }} />
               </View>
             )}
 
@@ -205,6 +311,13 @@ export default function ArticleDetailScreen() {
               </View>
             </View>
 
+            {article.isLive ? (
+              <View style={styles.heroLive}>
+                <View style={styles.heroLiveDot} />
+                <Text style={styles.heroLiveText}>LIVE</Text>
+              </View>
+            ) : null}
+
             {/* Category + headline overlay */}
             <View style={styles.heroTextWrap}>
               {article.category ? (
@@ -212,48 +325,58 @@ export default function ArticleDetailScreen() {
               ) : null}
               <Text style={styles.heroHeadline}>{article.headline}</Text>
             </View>
+
+            {/* TikTok-style action rail */}
+            <View style={styles.rail}>
+              <RailAction
+                icon={reaction === 'like' ? 'favorite' : 'favorite-border'}
+                label={likeCount}
+                active={reaction === 'like'}
+                accessibilityLabel="Like"
+                onPress={() => requireAuth(user, navigation, () => toggleLike(article.id))}
+              />
+              <RailAction
+                icon={reaction === 'dislike' ? 'thumb-down' : 'thumb-down-off-alt'}
+                label={dislikeCount}
+                active={reaction === 'dislike'}
+                activeColor="#FFB020"
+                accessibilityLabel="Dislike"
+                onPress={() => requireAuth(user, navigation, () => toggleDislike(article.id))}
+              />
+              <RailAction
+                icon="chat-bubble-outline"
+                label={commentCount}
+                accessibilityLabel="Comments"
+                onPress={() => scrollRef.current?.scrollToEnd({ animated: true })}
+              />
+              <RailAction
+                icon={saved ? 'bookmark' : 'bookmark-border'}
+                label={saved ? 'Saved' : 'Save'}
+                active={saved}
+                activeColor="#FFD54A"
+                accessibilityLabel="Save"
+                onPress={() => requireAuth(user, navigation, () => toggleSaveArticle(article))}
+              />
+              <RailAction
+                icon="repeat"
+                label={repostCount}
+                active={reposted}
+                activeColor="#4CD964"
+                accessibilityLabel="Repost"
+                onPress={() => requireAuth(user, navigation, () => toggleRepost(article.id, reposted))}
+              />
+            </View>
           </View>
 
           {/* Content sheet */}
           <View style={[styles.sheet, { backgroundColor: colors.background }]}>
-            {/* Floating engagement pill */}
-            <View style={[styles.pillWrap, { backgroundColor: colors.surface }, SoftShadow]}>
-              <TouchableOpacity
-                style={styles.pillItem}
-                onPress={() => requireAuth(user, navigation, () => toggleLike(article.id))}
-                activeOpacity={0.75}
-              >
-                <MaterialIcons
-                  name={reaction === 'like' ? 'favorite' : 'favorite-border'}
-                  size={20}
-                  color={reaction === 'like' ? colors.primary : colors.primaryText}
-                />
-                <Text style={[styles.pillCount, { color: colors.primaryText }]}>{likeCount}</Text>
-              </TouchableOpacity>
-              <View style={[styles.pillDivider, { backgroundColor: colors.divider }]} />
-              <TouchableOpacity
-                style={styles.pillItem}
-                onPress={() => scrollRef.current?.scrollToEnd({ animated: true })}
-                activeOpacity={0.75}
-              >
-                <MaterialIcons name="chat-bubble-outline" size={19} color={colors.primaryText} />
-                <Text style={[styles.pillCount, { color: colors.primaryText }]}>{commentCount}</Text>
-              </TouchableOpacity>
-              <View style={[styles.pillDivider, { backgroundColor: colors.divider }]} />
-              <TouchableOpacity
-                style={styles.pillItem}
-                onPress={() => requireAuth(user, navigation, () => toggleSaveArticle(article))}
-                activeOpacity={0.75}
-              >
-                <MaterialIcons name={saved ? 'bookmark' : 'bookmark-border'} size={20} color={saved ? colors.primary : colors.primaryText} />
-              </TouchableOpacity>
-            </View>
-
             {/* Author row */}
             <View style={styles.authorRow}>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.authorName, { color: colors.primaryText }]}>{article.author ?? 'Canada 24/7'}</Text>
-                <Text style={[styles.authorTime, { color: colors.hint }]}>{authorTime}</Text>
+                <Text style={[styles.authorTime, { color: colors.hint }]}>
+                  {authorTime}{(fresh.readTime ?? article.readTimeMinutes) ? `  ·  ${fresh.readTime ?? article.readTimeMinutes} min read` : ''}
+                </Text>
               </View>
               {article.authorAvatar ? (
                 <Image source={{ uri: article.authorAvatar }} style={styles.authorAvatar} />
@@ -266,48 +389,77 @@ export default function ArticleDetailScreen() {
 
             {/* Body */}
             {rawBody ? (
-              <EnrichedText style={{ ...styles.bodyText, color: colors.primaryText }}>
+              <EnrichedText style={{ ...styles.bodyText, fontSize: bodySize, lineHeight: bodySize * 1.6, color: colors.primaryText }}>
                 {rawBody}
               </EnrichedText>
             ) : (
               bodyText.map((para, i) => (
-                <Text key={i} style={[styles.bodyText, { color: colors.primaryText }]}>{para}</Text>
+                <Text key={i} style={[styles.bodyText, { fontSize: bodySize, lineHeight: bodySize * 1.6, color: colors.primaryText }]}>{para}</Text>
               ))
             )}
 
-            {/* Secondary reactions: dislike + repost */}
-            <View style={[styles.secondaryRow, { borderTopColor: colors.divider }]}>
-              <TouchableOpacity
-                style={styles.secondaryBtn}
-                onPress={() => requireAuth(user, navigation, () => toggleDislike(article.id))}
-                activeOpacity={0.75}
-              >
-                <MaterialIcons
-                  name={reaction === 'dislike' ? 'thumb-down' : 'thumb-down-off-alt'}
-                  size={18}
-                  color={reaction === 'dislike' ? '#D32F2F' : colors.hint}
-                />
-                <Text style={[styles.secondaryCount, { color: reaction === 'dislike' ? '#D32F2F' : colors.hint }]}>{dislikeCount}</Text>
+            {/* Liked by */}
+            {ENABLE_SOCIAL_PROFILES && likers.count > 0 ? (
+              <TouchableOpacity style={styles.likedBy} onPress={() => setLikersOpen(true)} activeOpacity={0.8}>
+                <View style={styles.likedStack}>
+                  {likers.likers.slice(0, 4).map((l, i) => (
+                    <View key={l.id} style={{ marginLeft: i === 0 ? 0 : -10 }}>
+                      <UserAvatar uri={l.avatar} name={l.displayName} size={26} ringColor={colors.background} />
+                    </View>
+                  ))}
+                </View>
+                <Text style={[styles.likedByText, { color: colors.secondaryText }]} numberOfLines={1}>
+                  Liked by <Text style={{ fontWeight: '800', color: colors.primaryText }}>{likers.likers[0]?.displayName}</Text>
+                  {likers.count > 1 ? ` and ${likers.count - 1} other${likers.count - 1 === 1 ? '' : 's'}` : ''}
+                </Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.secondaryBtn}
-                onPress={() => requireAuth(user, navigation, () => toggleRepost(article.id, reposted))}
-                activeOpacity={0.75}
-              >
-                <MaterialIcons name="repeat" size={19} color={reposted ? '#2E7D32' : colors.hint} />
-                <Text style={[styles.secondaryCount, { color: reposted ? '#2E7D32' : colors.hint }]}>{repostCount}</Text>
-              </TouchableOpacity>
-            </View>
+            ) : null}
           </View>
+
+          {/* Related coverage from other outlets */}
+          {(fresh.related ?? article.relatedCoverage ?? []).length > 0 ? (
+            <View style={styles.relatedSection}>
+              <Text style={[styles.relatedTitle, { color: colors.primaryText }]}>Related coverage</Text>
+              {(fresh.related ?? article.relatedCoverage ?? []).map(item => (
+                <TouchableOpacity
+                  key={item.url}
+                  activeOpacity={0.85}
+                  onPress={() => void Linking.openURL(item.url)}
+                  style={[styles.coverageCard, { backgroundColor: colors.surface, borderColor: colors.divider }]}
+                >
+                  <View style={styles.coverageSource}>
+                    {item.sourceFavicon ? <Image source={{ uri: item.sourceFavicon }} style={styles.favicon} /> : null}
+                    <Text style={[styles.coverageHost, { color: colors.hint }]} numberOfLines={1}>{item.sourceHostname}</Text>
+                    {item.age ? <Text style={[styles.coverageHost, { color: colors.hint }]}>· {item.age}</Text> : null}
+                  </View>
+                  <Text style={[styles.coverageTitle, { color: colors.primaryText }]} numberOfLines={2}>{item.title}</Text>
+                  {item.snippet ? <Text style={[styles.coverageSnippet, { color: colors.secondaryText }]} numberOfLines={2}>{item.snippet}</Text> : null}
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : (fresh.status ?? article.relatedCoverageStatus) === 'PENDING' ? (
+            <View style={styles.relatedSection}>
+              <Text style={[styles.relatedTitle, { color: colors.primaryText }]}>Related coverage</Text>
+              <Text style={[styles.coverageSnippet, { color: colors.hint }]}>Finding coverage from other outlets…</Text>
+            </View>
+          ) : null}
+
+          {/* More in this category */}
+          {moreInCategory.length > 0 ? (
+            <View style={styles.relatedSection}>
+              <Text style={[styles.relatedTitle, { color: colors.primaryText }]}>More in {article.category}</Text>
+              {moreInCategory.map((a, i) => (
+                <ArticleRow key={a.id} article={a} index={i} />
+              ))}
+            </View>
+          ) : null}
 
           {/* Comments */}
           <View style={[styles.commentsSection, { backgroundColor: colors.surface }]}>
             <Text style={[styles.commentsTitle, { color: colors.primaryText }]}>Comments ({commentCount})</Text>
 
             <View style={styles.commentInputRow}>
-              <View style={[styles.commentAvatar, { backgroundColor: colors.primary }]}>
-                <Text style={styles.commentAvatarText}>{user ? (user.displayName?.[0]?.toUpperCase() ?? '?') : '?'}</Text>
-              </View>
+              <UserAvatar uri={user?.avatar} name={user?.displayName} size={32} />
               <TextInput
                 style={[styles.commentInput, { color: colors.primaryText, backgroundColor: colors.background }]}
                 placeholder={user ? 'Write a comment…' : 'Sign in to comment…'}
@@ -333,15 +485,21 @@ export default function ArticleDetailScreen() {
             ) : (
               comments.map(c => (
                 <View key={c.id} style={[styles.commentItem, { borderTopColor: colors.divider }]}>
-                  <View style={[styles.commentAvatar, { backgroundColor: colors.primary }]}>
-                    <Text style={styles.commentAvatarText}>{c.authorName?.[0]?.toUpperCase() ?? '?'}</Text>
-                  </View>
+                  <UserAvatar
+                    uri={ENABLE_SOCIAL_PROFILES ? c.authorAvatar : undefined}
+                    name={c.authorName}
+                    size={38}
+                    onPress={ENABLE_SOCIAL_PROFILES && c.authorId && /^\d+$/.test(c.authorId) ? () => openProfile(c.authorId, c.authorName, c.authorAvatar) : undefined}
+                  />
                   <View style={{ flex: 1 }}>
-                    <View style={styles.commentMeta}>
-                      <Text style={[styles.commentAuthor, { color: colors.primaryText }]}>{c.authorName}</Text>
-                      <Text style={[styles.commentDate, { color: colors.hint }]}>{formatDate(c.createdAt)}</Text>
-                    </View>
-                    <Text style={[styles.commentText, { color: colors.primaryText }]}>{c.text}</Text>
+                    <TouchableOpacity
+                      disabled={!(ENABLE_SOCIAL_PROFILES && c.authorId && /^\d+$/.test(c.authorId))}
+                      onPress={() => openProfile(c.authorId, c.authorName, c.authorAvatar)}
+                    >
+                      <Text style={[styles.commentAuthor, { color: colors.hint }]}>{c.authorName}</Text>
+                    </TouchableOpacity>
+                    <Text style={[styles.commentText, { color: colors.primaryText, fontSize: Math.max(13, bodySize - 2), lineHeight: Math.max(13, bodySize - 2) * 1.45 }]}>{c.text}</Text>
+                    <Text style={[styles.commentDate, { color: colors.hint }]}>{timeAgo(c.createdAt)}</Text>
                   </View>
                 </View>
               ))
@@ -349,6 +507,14 @@ export default function ArticleDetailScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <LikersSheet
+        visible={likersOpen}
+        count={likers.count}
+        likers={likers.likers}
+        onClose={() => setLikersOpen(false)}
+        onOpenProfile={l => { setLikersOpen(false); openProfile(l.id, l.displayName, l.avatar); }}
+      />
 
       {/* More-options menu */}
       <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
@@ -403,7 +569,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.35)',
     alignItems: 'center', justifyContent: 'center',
   },
-  heroTextWrap: { position: 'absolute', left: 20, right: 20, bottom: 24 },
+  heroLive: { position: 'absolute', left: 20, top: 104, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#D52B1E', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
+  heroLiveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#fff' },
+  heroLiveText: { color: '#fff', fontSize: 11, fontWeight: '900', letterSpacing: 1.2 },
+  heroTextWrap: { position: 'absolute', left: 20, right: 84, bottom: 24 },
+  rail: { position: 'absolute', right: 12, bottom: 20, gap: 14, alignItems: 'center' },
   heroCategory: { color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '700', marginBottom: 6, letterSpacing: 0.3 },
   heroHeadline: { color: '#fff', fontSize: 24, fontWeight: '800', lineHeight: 30 },
   sheet: {
@@ -440,6 +610,14 @@ const styles = StyleSheet.create({
   },
   secondaryBtn: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   secondaryCount: { fontSize: 13, fontWeight: '700' },
+  relatedSection: { paddingHorizontal: 20, paddingTop: 22 },
+  relatedTitle: { fontSize: 18, fontWeight: '800', marginBottom: 10 },
+  coverageCard: { padding: 14, borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, marginBottom: 10 },
+  coverageSource: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+  favicon: { width: 16, height: 16, borderRadius: 4 },
+  coverageHost: { fontSize: 12, fontWeight: '600', flexShrink: 1 },
+  coverageTitle: { fontSize: 15, fontWeight: '800', lineHeight: 20 },
+  coverageSnippet: { fontSize: 13, fontWeight: '500', lineHeight: 18, marginTop: 4 },
   commentsSection: { marginTop: 8, padding: 20 },
   commentsTitle: { fontSize: 18, fontWeight: '800', marginBottom: 16 },
   commentInputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10, marginBottom: 12 },
@@ -454,8 +632,11 @@ const styles = StyleSheet.create({
   noCommentsText: { fontSize: 14, fontWeight: '600' },
   commentItem: { flexDirection: 'row', gap: 12, paddingVertical: 14, borderTopWidth: StyleSheet.hairlineWidth },
   commentMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
-  commentAuthor: { fontSize: 13, fontWeight: '700' },
-  commentDate: { fontSize: 11, fontWeight: '500' },
+  commentAuthor: { fontSize: 13, fontWeight: '700', marginBottom: 2 },
+  likedBy: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4, marginBottom: 4 },
+  likedStack: { flexDirection: 'row', alignItems: 'center' },
+  likedByText: { flex: 1, fontSize: 13, fontWeight: '500' },
+  commentDate: { fontSize: 12, fontWeight: '600', marginTop: 6 },
   commentText: { fontSize: 14, fontWeight: '400', lineHeight: 20 },
   modalBackdrop: { flex: 1 },
   menuCard: {

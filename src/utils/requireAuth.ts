@@ -1,24 +1,25 @@
-import { Alert } from 'react-native';
-
 /**
- * If user is logged in, run action immediately.
- * Otherwise show a prompt and navigate to sign-in.
+ * If the user is signed in, run the action immediately. Otherwise ask them to
+ * sign in through the in-app SignInRequired sheet (mounted once in App.tsx).
+ * It is an in-app sheet rather than Alert.alert because Alert does nothing on
+ * react-native-web, which left buttons like "post" looking dead in the browser.
  */
+type SignInRequiredListener = () => void;
+
+let listener: SignInRequiredListener | null = null;
+
+export function setSignInRequiredListener(next: SignInRequiredListener | null) {
+  listener = next;
+}
+
 export function requireAuth(
   user: { email: string } | null,
-  navigation: { navigate: (screen: 'AuthEmail') => void },
-  action: () => void
+  _navigation: unknown,
+  action: () => void,
 ) {
   if (user) {
     action();
     return;
   }
-  Alert.alert(
-    'Sign in required',
-    'Create a free account to save articles, follow stories, and post news.',
-    [
-      { text: 'Not now', style: 'cancel' },
-      { text: 'Sign In', onPress: () => navigation.navigate('AuthEmail') },
-    ]
-  );
+  listener?.();
 }

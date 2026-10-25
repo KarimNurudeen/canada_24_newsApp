@@ -6,25 +6,30 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Radius } from '../theme';
 import { useApp, type Article } from '../context/AppContext';
 import type { RootStackParamList } from '../navigation/types';
+import SlideUpCard from './SlideUpCard';
+import ArticleImage from './ArticleImage';
 
 interface ArticleRowProps {
   article: Article;
   trailingIcon?: keyof typeof MaterialIcons.glyphMap;
   onTrailingPress?: () => void;
+  /** Position in its list; later rows slide in slightly after earlier ones. */
+  index?: number;
 }
 
-export default function ArticleRow({ article, trailingIcon, onTrailingPress }: ArticleRowProps) {
-  const { colors } = useApp();
+export default function ArticleRow({ article, trailingIcon, onTrailingPress, index = 0 }: ArticleRowProps) {
+  const { colors, compactLayout } = useApp();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const sourceLabel = article.author || article.category || 'Canada 24/7';
   const initial = sourceLabel.trim().charAt(0).toUpperCase() || 'C';
 
   return (
+    <SlideUpCard delay={Math.min(index, 6) * 70} distance={36}>
     <TouchableOpacity
       activeOpacity={0.75}
       onPress={() => navigation.navigate('ArticleDetail', { article })}
-      style={styles.row}
+      style={[styles.row, compactLayout && styles.rowCompact, { backgroundColor: colors.surface, borderColor: colors.divider }]}
     >
       <View style={{ flex: 1, marginRight: 12 }}>
         <View style={styles.sourceRow}>
@@ -41,7 +46,7 @@ export default function ArticleRow({ article, trailingIcon, onTrailingPress }: A
           ) : null}
         </View>
 
-        <Text style={[styles.headline, { color: colors.primaryText }]} numberOfLines={3}>
+        <Text style={[styles.headline, compactLayout && styles.headlineCompact, { color: colors.primaryText }]} numberOfLines={compactLayout ? 2 : 3}>
           {article.headline}
         </Text>
 
@@ -55,14 +60,8 @@ export default function ArticleRow({ article, trailingIcon, onTrailingPress }: A
         </View>
       </View>
 
-      <View style={styles.thumbWrap}>
-        {article.imgUrl ? (
-          <Image source={{ uri: article.imgUrl }} style={styles.thumb} resizeMode="cover" />
-        ) : (
-          <View style={[styles.thumb, styles.thumbFallback, { backgroundColor: colors.primary + '20' }]}>
-            <MaterialIcons name="article" size={22} color={colors.primary} />
-          </View>
-        )}
+      <View style={[styles.thumbWrap, compactLayout && styles.thumbWrapCompact]}>
+        <ArticleImage uri={article.imgUrl} style={[styles.thumb, compactLayout && styles.thumbCompact]} />
         {trailingIcon ? (
           <TouchableOpacity
             onPress={onTrailingPress}
@@ -74,6 +73,7 @@ export default function ArticleRow({ article, trailingIcon, onTrailingPress }: A
         ) : null}
       </View>
     </TouchableOpacity>
+    </SlideUpCard>
   );
 }
 
@@ -81,7 +81,10 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    paddingVertical: 12,
+    padding: 12,
+    marginVertical: 6,
+    borderRadius: Radius.lg - 4,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   sourceRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
   avatar: {
@@ -97,6 +100,10 @@ const styles = StyleSheet.create({
   tag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: Radius.pill },
   tagText: { fontSize: 10, fontWeight: '700' },
   time: { fontSize: 11, fontWeight: '500' },
+  rowCompact: { padding: 8, marginVertical: 3 },
+  headlineCompact: { fontSize: 14, lineHeight: 18, marginBottom: 4 },
+  thumbWrapCompact: { width: 52, height: 52 },
+  thumbCompact: { width: 52, height: 52, borderRadius: Radius.sm },
   thumbWrap: { width: 72, height: 72, flexShrink: 0 },
   thumb: { width: 72, height: 72, borderRadius: Radius.md },
   thumbFallback: { alignItems: 'center', justifyContent: 'center' },

@@ -1,0 +1,17 @@
+# Builds the Android development client on EAS whenever `develop` is pushed.
+# Install the result from the build page, then run `npx expo start --dev-client`.
+# Uses the "development" profile in eas.json (API URL is set there).
+name: Development build
+
+on:
+  push:
+    branches:
+      - develop
+
+jobs:
+  build_android_dev:
+    name: Build Android (development)
+    type: build
+    params:
+      platform: android
+      profile: development

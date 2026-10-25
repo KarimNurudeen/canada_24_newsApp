@@ -146,6 +146,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   addPost: (post: CreatePostInput) => Promise<UserPost>;
   updateAvatar: (localUri: string) => Promise<void>;
+  updateProfile: (changes: { displayName?: string; bio?: string }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -361,6 +362,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await persistSession({ ...nextSession, user: updatedUser });
   };
 
+  const updateProfile = async (changes: { displayName?: string; bio?: string }): Promise<void> => {
+    const currentSession = (await readStoredSession<StoredSession>()) ?? session;
+    if (!currentSession) throw new Error('Authentication required');
+
+    const body: Record<string, string> = {};
+    if (changes.displayName !== undefined) body.display_name = changes.displayName.trim();
+    if (changes.bio !== undefined) body.bio = changes.bio.trim();
+
+    const { data, session: nextSession } = await requestWithStoredSession<BackendProfileUpdate, StoredSession>(
+      currentSession,
+      '/auth/me/',
+      { method: 'PATCH', body: JSON.stringify(body) },
+    );
+
+    await persistSession({
+      ...nextSession,
+      user: {
+        ...currentSession.user,
+        displayName: data.display_name,
+        avatar: data.avatar || undefined,
+        bio: data.bio || undefined,
+      },
+    });
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -372,6 +398,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signOut,
         addPost,
         updateAvatar,
+        updateProfile,
       }}
     >
       {children}

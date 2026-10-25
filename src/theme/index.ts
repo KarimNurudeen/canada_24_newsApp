@@ -14,6 +14,8 @@ export const Colors = {
     error: '#B71C1C',
     divider: '#E0E0E0',
     transparent: 'transparent',
+    canvas: 'transparent',
+    chrome: 'rgba(255,255,255,0.9)',
   },
   dark: {
     primary: '#FF453A',       // bright red for dark mode
@@ -30,6 +32,8 @@ export const Colors = {
     error: '#FF453A',
     divider: '#333333',
     transparent: 'transparent',
+    canvas: 'transparent',
+    chrome: 'rgba(13,13,13,0.88)',
   },
 };
 

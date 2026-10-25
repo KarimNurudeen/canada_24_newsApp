@@ -14,8 +14,10 @@ export type RootStackParamList = {
   VideoPlayer: { item: VideoItem };
   LocalNews: { region?: string } | undefined;
   SavedStories: undefined;
-  SectionDetail: { section: string };
+  SectionDetail: { section: string; topic?: string };
   CreatePost: undefined;
+  Settings: undefined;
+  PublicProfile: { userId: string; name?: string; avatar?: string };
   PrivacyPolicy: undefined;
   TermsOfService: undefined;
 };

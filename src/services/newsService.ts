@@ -29,6 +29,14 @@ type BackendArticle = {
   user_reaction: 'like' | 'dislike' | null;
   is_saved: boolean;
   is_reposted: boolean;
+  is_breaking?: boolean;
+  read_time_minutes?: number;
+  related_coverage?: {
+    title: string; url: string; snippet: string; source_hostname: string; source_favicon: string; age: string;
+  }[];
+  related_coverage_status?: string;
+  audio_url?: string | null;
+  audio_status?: string;
 };
 
 type BackendUserPost = {
@@ -110,6 +118,20 @@ export function mapBackendArticle(article: BackendArticle): Article {
     userReaction: article.user_reaction,
     isSaved: article.is_saved,
     isReposted: article.is_reposted,
+    readTimeMinutes: article.read_time_minutes,
+    relatedCoverage: (article.related_coverage ?? [])
+      .filter(item => item?.title && item?.url)
+      .map(item => ({
+        title: item.title,
+        url: item.url,
+        snippet: item.snippet ?? '',
+        sourceHostname: item.source_hostname ?? '',
+        sourceFavicon: item.source_favicon ?? '',
+        age: item.age ?? '',
+      })),
+    relatedCoverageStatus: article.related_coverage_status,
+    audioUrl: article.audio_url,
+    audioStatus: article.audio_status,
   };
 }
 
@@ -155,6 +177,34 @@ async function fetchArticleList(path: string): Promise<Article[]> {
   return extractList(payload).map(mapBackendArticle);
 }
 
+/** The one story an editor flagged as breaking, or null (the bar then hides). */
+export async function fetchBreakingNews(): Promise<Article | null> {
+  try {
+    const payload = await apiRequest<BackendArticle | null>('/news/breaking/');
+    return payload ? mapBackendArticle(payload) : null;
+  } catch {
+    return null;
+  }
+}
+
+export type ImmigrationStats = {
+  year: number | null;
+  national_total?: number;
+  provinces: { province: string; total: number; share: number }[];
+  top_source_countries: { country: string; total: number }[];
+  source?: string;
+  note?: string;
+};
+
+export async function fetchImmigrationStats(): Promise<ImmigrationStats | null> {
+  try {
+    const payload = await apiRequest<ImmigrationStats>('/news/immigration-stats/');
+    return payload && payload.year ? payload : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchTopStories(): Promise<Article[]> {
   try {
     return await fetchArticleList('/news/top-stories/');
@@ -171,10 +221,35 @@ export async function fetchCommunityStories(): Promise<Article[]> {
   }
 }
 
+/* Nav labels that differ from the backend's section labels ("Jobs & Money" is
+   the backend's "Opportunities"). "Housing" has no backend section yet, so it
+   resolves to nothing and shows the empty state. */
+const SECTION_NAME_ALIASES: Record<string, string> = {
+  'jobs & money': 'Opportunities',
+  jobs: 'Opportunities',
+  auto: 'Auto News',
+  education: 'Education in Canada',
+};
+
+/* The backend has no Settlement section, so it is assembled from search hits
+   on settlement-related terms, de-duplicated and sorted newest first. */
+const SETTLEMENT_TERMS = ['settlement', 'newcomers', 'settling in canada'];
+
+async function fetchSettlementArticles(): Promise<Article[]> {
+  const lists = await Promise.all(SETTLEMENT_TERMS.map(term => searchArticles(term)));
+  const byId: Record<string, Article> = {};
+  for (const article of lists.flat()) byId[article.id] = article;
+  return Object.values(byId).sort(
+    (a, b) => new Date(b.publishedAt ?? 0).getTime() - new Date(a.publishedAt ?? 0).getTime(),
+  );
+}
+
 export async function fetchCategoryArticles(section: string): Promise<Article[]> {
+  if (section.toLowerCase() === 'settlement') return fetchSettlementArticles();
   try {
     const sections = await apiRequest<BackendSection[]>('/news/sections/');
-    const match = sections.find(item => item.label.toLowerCase() === section.toLowerCase());
+    const requested = SECTION_NAME_ALIASES[section.toLowerCase()] ?? section;
+    const match = sections.find(item => item.label.toLowerCase() === requested.toLowerCase());
     if (!match) return [];
 
     return await fetchArticleList(`/news/sections/${match.slug}/`);
@@ -188,6 +263,27 @@ export async function fetchLocalNews(regionName?: string): Promise<Article[]> {
 
   try {
     return await fetchArticleList(`/news/local/${query}`);
+  } catch {
+    return [];
+  }
+}
+
+export type RegionInfo = { slug: string; name: string; province: string };
+
+export async function fetchRegions(): Promise<RegionInfo[]> {
+  try {
+    return await apiRequest<RegionInfo[]>('/regions/');
+  } catch {
+    return [];
+  }
+}
+
+/** Articles tagged to exactly this region. Unlike /news/local/, which falls
+ * back to every article when a region has none, this returns [] — which is
+ * what lets the screen hide regions that have no news. */
+export async function fetchRegionArticles(slug: string): Promise<Article[]> {
+  try {
+    return await fetchArticleList(`/news/articles/?regions__slug=${encodeURIComponent(slug)}`);
   } catch {
     return [];
   }

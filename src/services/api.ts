@@ -24,6 +24,8 @@ export class ApiError extends Error {
   }
 }
 
+const PRODUCTION_API_BASE_URL = 'https://ca.niveel.com/api/v1';
+
 function normalizeBaseUrl(url: string): string {
   return url.replace(/\/+$/, '');
 }
@@ -37,6 +39,9 @@ function getHostFromScriptUrl(): string | null {
 }
 
 function getDefaultApiBaseUrl(): string {
+  // A release build has no Metro host to infer, so never fall back to localhost there.
+  if (!__DEV__) return PRODUCTION_API_BASE_URL;
+
   const metroHost = getHostFromScriptUrl();
   if (metroHost) {
     return `http://${metroHost}:8000/api/v1`;

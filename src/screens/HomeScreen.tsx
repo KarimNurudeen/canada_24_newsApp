@@ -1,194 +1,256 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Image, Dimensions, RefreshControl,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, Image, RefreshControl,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Radius, SoftShadow } from '../theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Radius } from '../theme';
+import { NAV_CATEGORIES, findNavCategory } from '../config/nav';
 import { ENABLE_USER_POST_CREATION } from '../config/features';
-import { CATEGORY_DEFINITIONS } from '../config/content';
+import { filterByTopic } from '../utils/topics';
+import TopicDropdown from '../components/TopicDropdown';
+import SearchModal from '../components/SearchModal';
+import NotificationsSheet from '../components/NotificationsSheet';
+import CategoryCards from '../components/CategoryCards';
+import BreakingTicker from '../components/BreakingTicker';
+import FeaturedUpdates from '../components/FeaturedUpdates';
+import ImmigrationByProvince from '../components/ImmigrationByProvince';
+import LatestVideosStrip from '../components/LatestVideosStrip';
+import AppFooter from '../components/AppFooter';
 import ArticleRow from '../components/ArticleRow';
+import SlideUpCard from '../components/SlideUpCard';
+import ArticleImage from '../components/ArticleImage';
 import { useApp } from '../context/AppContext';
-import { useAuth } from '../context/AuthContext';
-import { requireAuth } from '../utils/requireAuth';
 import { fetchCategoryArticles } from '../services/newsService';
 import type { Article } from '../context/AppContext';
 import type { RootStackParamList } from '../navigation/types';
 
-const CANADA247_LOGO = require('../../assets/canada247-logo.jpg');
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-const FILTER_LABELS = ['All', 'Community', ...CATEGORY_DEFINITIONS.filter(c => c.code !== 'GENERAL').map(c => c.label)];
+const FILTER_LABELS = ['All', ...(ENABLE_USER_POST_CREATION ? ['Community'] : []), ...NAV_CATEGORIES.map(c => c.label)];
+const ROW_STORIES = 3;
+const NAVY = '#0b1a3a';
+const NAVY_MID = '#12306a';
+const NAVY_CHROME = 'rgba(11,26,58,0.94)';
+
+/** Wordmark: condensed CANADA over italic "in real time" with a live dot —
+ * the same lockup as the web header. */
+function Wordmark({ colors }: { colors: ReturnType<typeof useApp>['colors'] }) {
+  return (
+    <View>
+      <Text style={[styles.wordmark, { color: '#fff' }]}>CANADA</Text>
+      <View style={styles.wordmarkSub}>
+        <View style={[styles.wordmarkRule, { backgroundColor: colors.primary }]} />
+        <Text style={[styles.wordmarkTag, { color: 'rgba(255,255,255,0.8)' }]}>in real time</Text>
+        <View style={[styles.liveDot, { backgroundColor: colors.primary }]} />
+      </View>
+    </View>
+  );
+}
 
 export default function HomeScreen() {
   const { colors, communityStories, topStories, loadingNews, refreshNews } = useApp();
-  const { user } = useAuth();
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const navigation = useNavigation<Nav>();
   const insets = useSafeAreaInsets();
 
   const [activeFilter, setActiveFilter] = useState('All');
-  const [categoryArticles, setCategoryArticles] = useState<Article[]>([]);
-  const [loadingCategory, setLoadingCategory] = useState(false);
+  const [activeTopic, setActiveTopic] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [bellOpen, setBellOpen] = useState(false);
+  const [categoryArticles, setCategoryArticles] = useState<Record<string, Article[]>>({});
+
+  // Close the search overlay when a result opens another screen.
+  useEffect(() => navigation.addListener('blur', () => setSearchOpen(false)), [navigation]);
 
   useEffect(() => {
-    if (activeFilter === 'All' || activeFilter === 'Community') return;
     let cancelled = false;
-    setLoadingCategory(true);
-    fetchCategoryArticles(activeFilter)
-      .then(data => { if (!cancelled) setCategoryArticles(data); })
-      .finally(() => { if (!cancelled) setLoadingCategory(false); });
+    NAV_CATEGORIES.forEach(category => {
+      fetchCategoryArticles(category.section).then(list => {
+        if (!cancelled) setCategoryArticles(prev => ({ ...prev, [category.label]: list }));
+      });
+    });
     return () => { cancelled = true; };
-  }, [activeFilter]);
+  }, []);
+
+  const images = useMemo(
+    () => Object.fromEntries(
+      Object.entries(categoryArticles).map(([label, list]) => [label, list.find(a => a.imgUrl)?.imgUrl]),
+    ),
+    [categoryArticles],
+  );
 
   const hero = topStories[0];
+  const activeCategory = findNavCategory(activeFilter);
   const listArticles =
     activeFilter === 'All' ? topStories.slice(1)
       : activeFilter === 'Community' ? communityStories
-      : categoryArticles;
-  const hasStories = topStories.length > 0;
-
-  if (!hasStories && !loadingNews) {
-    return (
-      <View style={[styles.emptyState, { backgroundColor: colors.background }]}>
-        <MaterialIcons name="newspaper" size={52} color={colors.primary} />
-        <Text style={[styles.emptyTitle, { color: colors.primaryText }]}>No stories yet</Text>
-        <Text style={[styles.emptyText, { color: colors.secondaryText }]}>
-          Pull to refresh once the backend has content.
-        </Text>
-      </View>
-    );
-  }
-
-  if (!hero) {
-    return (
-      <View style={[styles.emptyState, { backgroundColor: colors.background }]}>
-        <MaterialIcons name="hourglass-empty" size={52} color={colors.primary} />
-        <Text style={[styles.emptyTitle, { color: colors.primaryText }]}>Loading stories</Text>
-      </View>
-    );
-  }
+      : filterByTopic(categoryArticles[activeFilter] ?? [], activeTopic);
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
+    <View style={{ flex: 1, backgroundColor: colors.canvas }}>
       <ScrollView
-        contentContainerStyle={{ paddingBottom: 100 }}
+        stickyHeaderIndices={[0]}
+        contentContainerStyle={{ paddingBottom: 0 }}
         refreshControl={
           <RefreshControl refreshing={loadingNews} onRefresh={refreshNews} tintColor={colors.primary} colors={[colors.primary]} />
         }
       >
-        {/* Hero */}
-        <TouchableOpacity
-          activeOpacity={0.92}
-          onPress={() => navigation.navigate('ArticleDetail', { article: hero })}
-          style={{ height: SCREEN_HEIGHT * 0.52 }}
-        >
-          {hero.imgUrl ? (
-            <Image source={{ uri: hero.imgUrl }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-          ) : (
-            <View style={[StyleSheet.absoluteFillObject, { backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }]}>
-              <MaterialIcons name="article" size={48} color="#fff" />
-            </View>
-          )}
-
-          {/* Header row overlaid on hero */}
-          <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
-            <Image source={CANADA247_LOGO} style={styles.logo} resizeMode="contain" />
+        {/* Header: wordmark left, search + alerts right */}
+        <View style={[styles.header, { paddingTop: insets.top + 10, backgroundColor: NAVY_CHROME, borderBottomColor: 'rgba(255,255,255,0.12)' }]}>
+          <Wordmark colors={colors} />
+          <View style={styles.headerActions}>
             <TouchableOpacity
-              style={styles.bellBtn}
-              onPress={() => navigation.navigate('AlertSetup')}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              style={[styles.iconBtn, { backgroundColor: 'rgba(255,255,255,0.12)', borderColor: 'rgba(255,255,255,0.18)' }]}
+              onPress={() => setSearchOpen(true)}
+              accessibilityLabel="Search"
+              activeOpacity={0.8}
+            >
+              <MaterialIcons name="search" size={22} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.iconBtn, { backgroundColor: 'rgba(255,255,255,0.12)', borderColor: 'rgba(255,255,255,0.18)' }]}
+              onPress={() => setBellOpen(true)}
+              accessibilityLabel="Notifications"
+              activeOpacity={0.8}
             >
               <MaterialIcons name="notifications-none" size={22} color="#fff" />
+              <View style={[styles.badgeDot, { backgroundColor: colors.primary, borderColor: NAVY }]} />
             </TouchableOpacity>
           </View>
+        </View>
 
-          <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.75)']}
-            style={styles.heroGradient}
-          />
+        {/* Breaking bar + trending strip, as on the web */}
+        <BreakingTicker articles={topStories} />
 
-          {hero.isLive ? (
-            <View style={[styles.livePill, { backgroundColor: colors.primary }]}>
-              <Text style={styles.livePillText}>LIVE</Text>
+        {/* Category cards come first, as on the web landing page */}
+        <CategoryCards
+          images={images}
+          onOpenCategory={section => navigation.navigate('SectionDetail', { section })}
+          onOpenVideos={() => (navigation as any).navigate('Watch')}
+        />
+
+        {/* Top story */}
+        {hero ? (
+          <SlideUpCard style={styles.block} delay={150}>
+            <BlockTitle title="Top Story" color={colors.primary} textColor={colors.primaryText} />
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => navigation.navigate('ArticleDetail', { article: hero })}
+              style={[styles.heroCard, { backgroundColor: NAVY, borderColor: NAVY_MID }]}
+            >
+              <ArticleImage uri={hero.imgUrl} style={styles.heroImage} />
+              <View style={styles.heroBody}>
+                <View style={styles.heroMeta}>
+                  {hero.category ? (
+                    <Text style={[styles.heroCategory, { color: colors.primary }]}>{hero.category.toUpperCase()}</Text>
+                  ) : null}
+                  {hero.isLive ? (
+                    <View style={[styles.livePill, { backgroundColor: colors.primary }]}>
+                      <Text style={styles.livePillText}>LIVE</Text>
+                    </View>
+                  ) : null}
+                  <Text style={[styles.heroTime, { color: 'rgba(255,255,255,0.6)' }]}>{hero.time}</Text>
+                </View>
+                <Text style={[styles.heroHeadline, { color: '#fff' }]} numberOfLines={3}>{hero.headline}</Text>
+              </View>
+            </TouchableOpacity>
+          </SlideUpCard>
+        ) : null}
+
+        <FeaturedUpdates categoryArticles={categoryArticles} />
+        <ImmigrationByProvince />
+
+        {/* Category rows, like the web's section blocks */}
+        {NAV_CATEGORIES.map(category => {
+          const list = categoryArticles[category.label] ?? [];
+          if (list.length === 0) return null;
+          return (
+            <View key={category.label} style={styles.block}>
+              <BlockTitle
+                title={category.label}
+                color={category.color}
+                textColor={colors.primaryText}
+                actionLabel="See all"
+                onAction={() => navigation.navigate('SectionDetail', { section: category.section })}
+              />
+              {list.slice(0, ROW_STORIES).map((article, i) => (
+                <View key={article.id} style={[styles.rowDivider, { borderBottomColor: colors.divider }]}>
+                  <ArticleRow article={article} index={i} />
+                </View>
+              ))}
+            </View>
+          );
+        })}
+
+        {/* Latest feed with category filter */}
+        <View style={styles.block}>
+          <BlockTitle title="Latest News" color={colors.primary} textColor={colors.primaryText} />
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+            {FILTER_LABELS.map(label => {
+              const active = activeFilter === label;
+              return (
+                <TouchableOpacity
+                  key={label}
+                  onPress={() => { setActiveFilter(label); setActiveTopic(null); }}
+                  style={[
+                    styles.filterChip,
+                    { borderColor: active ? colors.primary : colors.divider, backgroundColor: active ? colors.primary : 'transparent' },
+                  ]}
+                >
+                  <Text style={[styles.filterChipText, { color: active ? '#fff' : colors.secondaryText }]}>{label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          {activeCategory ? (
+            <View style={{ marginBottom: 8 }}>
+              <TopicDropdown topics={activeCategory.topics} value={activeTopic} onChange={setActiveTopic} color={activeCategory.color} />
             </View>
           ) : null}
 
-          <View style={styles.heroContent}>
-            <View style={styles.heroMetaRow}>
-              <View style={[styles.heroAvatar, { backgroundColor: colors.primary }]}>
-                <Text style={styles.heroAvatarText}>{(hero.author ?? 'C').charAt(0).toUpperCase()}</Text>
-              </View>
-              <Text style={styles.heroSource} numberOfLines={1}>
-                {hero.author ?? 'Canada 24/7'}{hero.category ? ` · ${hero.category}` : ''}
-              </Text>
-            </View>
-            <Text style={styles.heroHeadline} numberOfLines={3}>{hero.headline}</Text>
-            <TouchableOpacity
-              style={[styles.readMoreBtn, { backgroundColor: '#fff' }]}
-              onPress={() => navigation.navigate('ArticleDetail', { article: hero })}
-              activeOpacity={0.85}
-            >
-              <Text style={[styles.readMoreText, { color: colors.primaryText }]}>Read More</Text>
-              <MaterialIcons name="arrow-forward" size={16} color={colors.primaryText} />
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-
-        {/* Latest News header */}
-        <Text style={[styles.sectionTitle, { color: colors.primaryText }]}>Latest News</Text>
-
-        {/* Category filter tabs */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterRow}
-        >
-          {FILTER_LABELS.map(label => {
-            const active = activeFilter === label;
-            return (
-              <TouchableOpacity
-                key={label}
-                onPress={() => setActiveFilter(label)}
-                style={[styles.filterTab, active && { borderBottomColor: colors.primaryText, borderBottomWidth: 2 }]}
-              >
-                <Text style={[styles.filterTabText, { color: active ? colors.primaryText : colors.hint }]}>
-                  {label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-
-        {/* Article list */}
-        <View style={styles.listPadding}>
-          {loadingCategory ? (
-            <Text style={[styles.loadingText, { color: colors.hint }]}>Loading…</Text>
-          ) : listArticles.length === 0 ? (
-            <Text style={[styles.loadingText, { color: colors.hint }]}>
-              {activeFilter === 'Community' ? 'No community stories yet — be the first to post one!' : 'No stories in this category yet.'}
+          {listArticles.length === 0 ? (
+            <Text style={[styles.emptyText, { color: colors.hint }]}>
+              {activeFilter === 'Community'
+                ? 'No community stories yet — be the first to post one!'
+                : activeTopic ? `No ${activeTopic} stories right now.`
+                : loadingNews ? 'Loading…' : 'No stories in this category yet.'}
             </Text>
           ) : (
-            listArticles.map(article => (
+            listArticles.map((article, i) => (
               <View key={article.id} style={[styles.rowDivider, { borderBottomColor: colors.divider }]}>
-                <ArticleRow article={article} />
+                <ArticleRow article={article} index={i} />
               </View>
             ))
           )}
         </View>
+        <LatestVideosStrip onOpenVideos={() => (navigation as any).navigate('Watch')} />
+        <AppFooter />
       </ScrollView>
 
-      {ENABLE_USER_POST_CREATION ? (
-        <TouchableOpacity
-          style={[styles.fab, { backgroundColor: colors.primary }, SoftShadow]}
-          onPress={() => requireAuth(user, navigation, () => navigation.navigate('CreatePost'))}
-          activeOpacity={0.85}
-        >
-          <MaterialIcons name="edit" size={20} color="#fff" />
-          <Text style={styles.fabText}>Post News</Text>
+      <SearchModal visible={searchOpen} onClose={() => setSearchOpen(false)} />
+      <NotificationsSheet
+        visible={bellOpen}
+        onClose={() => setBellOpen(false)}
+        onManageAll={() => navigation.navigate('AlertSetup')}
+      />
+    </View>
+  );
+}
+
+/** Navy banner that heads each block, with a coloured category tab on its left. */
+function BlockTitle({ title, color, actionLabel, onAction }: {
+  title: string; color: string; textColor?: string; actionLabel?: string; onAction?: () => void;
+}) {
+  return (
+    <View style={styles.blockBanner}>
+      <View style={[styles.blockAccent, { backgroundColor: color }]} />
+      <Text style={styles.blockTitle}>{title}</Text>
+      {actionLabel ? (
+        <TouchableOpacity onPress={onAction} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Text style={styles.blockAction}>{actionLabel} ›</Text>
         </TouchableOpacity>
       ) : null}
     </View>
@@ -196,87 +258,41 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  headerRow: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    zIndex: 2,
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingBottom: 12, borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  logo: { width: 110, height: 32 },
-  bellBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    alignItems: 'center', justifyContent: 'center',
+  wordmark: { fontFamily: 'BebasNeue_400Regular', fontSize: 30, letterSpacing: 5, lineHeight: 32 },
+  wordmarkSub: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 1 },
+  wordmarkRule: { width: 16, height: 2 },
+  wordmarkTag: { fontSize: 13, fontStyle: 'italic', fontWeight: '500', letterSpacing: 0.5 },
+  liveDot: { width: 6, height: 6, borderRadius: 3 },
+  headerActions: { flexDirection: 'row', gap: 10 },
+  iconBtn: {
+    width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  heroGradient: {
-    position: 'absolute',
-    left: 0, right: 0, bottom: 0,
-    height: '55%',
+  badgeDot: { position: 'absolute', top: 9, right: 10, width: 9, height: 9, borderRadius: 5, borderWidth: 1.5 },
+  block: { paddingHorizontal: 20, paddingTop: 26 },
+  blockBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10,
+    backgroundColor: NAVY, borderRadius: 14, paddingVertical: 12, paddingRight: 16, overflow: 'hidden',
   },
-  livePill: {
-    position: 'absolute',
-    top: 60, right: 20,
-    paddingHorizontal: 10, paddingVertical: 4,
-    borderRadius: Radius.pill,
-  },
-  livePillText: { color: '#fff', fontSize: 11, fontWeight: '800' },
-  heroContent: {
-    position: 'absolute',
-    left: 20, right: 20, bottom: 24,
-  },
-  heroMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  heroAvatar: {
-    width: 22, height: 22, borderRadius: 11,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  heroAvatarText: { color: '#fff', fontSize: 11, fontWeight: '800' },
-  heroSource: { color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: '600', flexShrink: 1 },
-  heroHeadline: { color: '#fff', fontSize: 24, fontWeight: '800', lineHeight: 30, marginBottom: 16 },
-  readMoreBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 6,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: Radius.pill,
-  },
-  readMoreText: { fontSize: 14, fontWeight: '700' },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    paddingHorizontal: 20,
-    paddingTop: 22,
-    paddingBottom: 4,
-  },
-  filterRow: { paddingHorizontal: 20, gap: 20, paddingBottom: 12 },
-  filterTab: { paddingBottom: 8 },
-  filterTabText: { fontSize: 14, fontWeight: '600' },
-  listPadding: { paddingHorizontal: 20 },
-  rowDivider: { borderBottomWidth: StyleSheet.hairlineWidth },
-  loadingText: { fontSize: 13, fontWeight: '600', paddingVertical: 16 },
-  fab: {
-    position: 'absolute',
-    bottom: 20,
-    right: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: Radius.pill,
-  },
-  fabText: { fontSize: 14, fontWeight: '700', color: '#fff' },
-  emptyState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-    gap: 12,
-  },
-  emptyTitle: { fontSize: 20, fontWeight: '800' },
-  emptyText: { fontSize: 14, fontWeight: '600', lineHeight: 21, textAlign: 'center' },
+  blockAccent: { width: 5, alignSelf: 'stretch', marginVertical: -12 },
+  blockTitle: { flex: 1, color: '#fff', fontSize: 17, fontWeight: '800', letterSpacing: 0.2 },
+  blockAction: { color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: '700' },
+  heroCard: { borderRadius: Radius.lg, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth },
+  heroImage: { width: '100%', height: 200 },
+  heroBody: { padding: 16 },
+  heroMeta: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+  heroCategory: { fontSize: 11, fontWeight: '800', letterSpacing: 1 },
+  heroTime: { fontSize: 12, fontWeight: '500' },
+  heroHeadline: { fontSize: 20, fontWeight: '800', lineHeight: 26 },
+  livePill: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: Radius.pill },
+  livePillText: { color: '#fff', fontSize: 10, fontWeight: '800' },
+  rowDivider: {},
+  filterRow: { gap: 8, paddingBottom: 14 },
+  filterChip: { borderWidth: 1, borderRadius: Radius.pill, paddingHorizontal: 14, paddingVertical: 7 },
+  filterChipText: { fontSize: 13, fontWeight: '700' },
+  emptyText: { fontSize: 13, fontWeight: '600', paddingVertical: 16 },
 });

@@ -32,7 +32,7 @@ export default function SavedScreen() {
 
   if (!user) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <View style={{ flex: 1, backgroundColor: colors.canvas }}>
         <BackHeader title="Saved Stories" colors={colors} onBack={() => navigation.goBack()} />
         <View style={styles.empty}>
           <MaterialIcons name="bookmark-border" size={64} color={colors.primary} style={{ opacity: 0.6 }} />
@@ -55,7 +55,7 @@ export default function SavedScreen() {
 
   if (savedArticles.length === 0) {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <View style={{ flex: 1, backgroundColor: colors.canvas }}>
         <BackHeader title="Saved Stories" colors={colors} onBack={() => navigation.goBack()} />
         <View style={styles.empty}>
           <MaterialIcons name="bookmark-border" size={64} color={colors.primaryText} style={{ opacity: 0.3 }} />
@@ -71,13 +71,12 @@ export default function SavedScreen() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
+    <View style={{ flex: 1, backgroundColor: colors.canvas }}>
       <BackHeader title="Saved Stories" colors={colors} onBack={() => navigation.goBack()} />
       <FlatList
         data={savedArticles}
         keyExtractor={item => item.id}
         contentContainerStyle={{ paddingHorizontal: 20 }}
-        ItemSeparatorComponent={() => <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: colors.divider }} />}
         renderItem={({ item }) => (
           <ArticleRow
             article={item}

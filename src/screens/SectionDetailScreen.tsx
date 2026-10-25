@@ -11,6 +11,9 @@ import { Radius } from '../theme';
 import ArticleRow from '../components/ArticleRow';
 import { useApp } from '../context/AppContext';
 import { fetchCategoryArticles } from '../services/newsService';
+import { findNavCategory } from '../config/nav';
+import { filterByTopic } from '../utils/topics';
+import TopicDropdown from '../components/TopicDropdown';
 import type { Article } from '../context/AppContext';
 import type { RootStackParamList } from '../navigation/types';
 
@@ -39,13 +42,15 @@ const SECTION_COLORS: Record<string, string> = {
 export default function SectionDetailScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<SectionDetailRouteProp>();
-  const { section } = route.params;
+  const { section, topic: initialTopic } = route.params;
+  const navCategory = findNavCategory(section);
+  const [topic, setTopic] = useState<string | null>(initialTopic ?? null);
   const { colors } = useApp();
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
-  const sectionColor = SECTION_COLORS[section] ?? colors.primary;
+  const sectionColor = navCategory?.color ?? SECTION_COLORS[section] ?? colors.primary;
 
   useEffect(() => {
     let cancelled = false;
@@ -82,7 +87,7 @@ export default function SectionDetailScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.canvas }]}>
       <StatusBar barStyle="light-content" backgroundColor={sectionColor} />
 
       {/* Header */}
@@ -98,6 +103,12 @@ export default function SectionDetailScreen() {
           <MaterialIcons name="refresh" size={24} color="#fff" />
         </TouchableOpacity>
       </View>
+
+      {navCategory ? (
+        <View style={styles.topicRow}>
+          <TopicDropdown topics={navCategory.topics} value={topic} onChange={setTopic} color={sectionColor} />
+        </View>
+      ) : null}
 
       {/* Loading */}
       {loading && (
@@ -122,10 +133,14 @@ export default function SectionDetailScreen() {
       {/* Article list */}
       {!loading && !error && (
         <FlatList
-          data={articles}
+          data={filterByTopic(articles, topic)}
+          ListEmptyComponent={
+            <Text style={[styles.loadingText, { color: colors.primaryText, padding: 24, textAlign: 'center' }]}>
+              {topic ? `No ${topic} stories right now.` : 'No stories yet.'}
+            </Text>
+          }
           keyExtractor={(item, i) => item.id + i}
           contentContainerStyle={{ paddingVertical: 12 }}
-          ItemSeparatorComponent={() => <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: colors.divider, marginHorizontal: 20 }} />}
           renderItem={({ item }) => (
             <View style={{ paddingHorizontal: 20 }}>
               <ArticleRow article={item} />
@@ -153,6 +168,7 @@ const styles = StyleSheet.create({
     lineHeight: 26,
   },
   headerSubtitle: { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600' },
+  topicRow: { paddingHorizontal: 20, paddingTop: 12 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 32 },
   loadingText: { fontSize: 14, fontWeight: '600', opacity: 0.6 },
   errorTitle: { fontSize: 17, fontWeight: '700', textAlign: 'center' },

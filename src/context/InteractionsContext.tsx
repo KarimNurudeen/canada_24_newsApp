@@ -16,6 +16,9 @@ export interface Comment {
   articleId: string;
   authorEmail: string;
   authorName: string;
+  /** Backend user id, when known — lets the UI open the author's profile. */
+  authorId?: string;
+  authorAvatar?: string;
   text: string;
   createdAt: string;
 }
@@ -27,8 +30,10 @@ type BackendComment = {
   article: number;
   text: string;
   created_at: string;
+  author_id?: number;
   author_name: string;
   author_email: string;
+  author_avatar?: string;
 };
 
 type ReactionSummary = {
@@ -86,6 +91,8 @@ function mapBackendComment(comment: BackendComment): Comment {
     articleId: String(comment.article),
     authorEmail: comment.author_email,
     authorName: comment.author_name,
+    authorId: comment.author_id !== undefined ? String(comment.author_id) : undefined,
+    authorAvatar: comment.author_avatar || undefined,
     text: comment.text,
     createdAt: comment.created_at,
   };
@@ -295,6 +302,8 @@ export function InteractionsProvider({ children }: { children: React.ReactNode }
       articleId,
       authorEmail: user.email,
       authorName: user.displayName,
+      authorId: user.id,
+      authorAvatar: user.avatar,
       text: text.trim(),
       createdAt: new Date().toISOString(),
     };
