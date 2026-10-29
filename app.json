@@ -2,7 +2,8 @@
   "expo": {
     "name": "Canada 247",
     "slug": "canada247",
-    "version": "1.0.0",
+    "version": "2.0.0",
+    "scheme": "canada247",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -29,7 +30,7 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.canada247.app",
-      "versionCode": 2
+      "versionCode": 3
     },
     "web": {
       "favicon": "./assets/favicon.png"
