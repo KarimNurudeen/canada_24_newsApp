@@ -83,6 +83,24 @@ To pull the release back before approval, use "Remove changes" on the Changes in
 - Update group `445d7f09-8d4e-45d0-8d3f-5e6d34fd69f8`, runtime `2.0.0`, commit `c97edf5`.
   Still to confirm on a device: mute silences the video, and videos autoplay on scroll.
 
+## OTA update: YouTube mute/autoplay and full-screen videos (2026-10-30)
+
+- The Watch feed plays YouTube through `react-native-youtube-iframe` (a WebView), not expo-av,
+  so the earlier expo-av fix did not apply. Root cause: the library posts play/pause/mute to
+  `window` in its page, but react-native-webview on Android dispatches to `document`
+  (non-bubbling), so every command was dropped. Fixed with an injected bridge
+  (`YT_INJECTED_JS` in `VideoFeedScreen.tsx`); verified in a desktop browser that mute is
+  ignored without it and applied with it.
+- Layout: injected CSS makes the player fill its view. Portrait Shorts (HEAD request to
+  `youtube.com/shorts/<id>`, cached) fill the screen; widescreen clips are scaled to full
+  height and centre-cropped. To letterbox widescreen clips instead of cropping, change the
+  non-Short branch in `VideoPage` to use `width: SCREEN_WIDTH` like the Short branch.
+- Tap layer toggles pause; repost/share/sound buttons have dark round backgrounds and labels.
+- Update group `dba84fd0-1623-4556-b547-094800b8b4c9`, runtime `2.0.0`, commit `2a8c6ee`.
+- Not verifiable off-device: autoplay without a gesture (desktop Chromium blocks it; Android
+  WebView with `mediaPlaybackRequiresUserAction={false}` should allow it). If videos still do
+  not start on a phone, try `forceAndroidAutoplay` on `YoutubePlayer`.
+
 ## How to release the next version
 
 1. Bump `version` and `android.versionCode` in `app.json`. versionCode must be higher than
