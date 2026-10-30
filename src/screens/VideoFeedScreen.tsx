@@ -18,6 +18,8 @@ import type { VideoItem } from '../types/video';
 import type { RootStackParamList } from '../navigation/types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+// Module-level so FlatList sees the same object on every render (it does not support changing it).
+const VIEWABILITY = { itemVisiblePercentThreshold: 70 };
 type Tab = 'trending' | 'live';
 
 function youtubeIdOf(url?: string): string | null {
@@ -64,8 +66,26 @@ function VideoPage({ item, height, active, muted, onToggleMute }: {
   const reposted = isReposted(item.id) ?? item.isReposted ?? false;
   const repostCount = getRepostCount(item.id) ?? item.repostsCount ?? 0;
 
+  const wantPlay = active && !paused;
+
+  /** Push play / mute straight to the player. expo-av does not reliably pick up prop changes
+   * after mount on Android, so scroll-to-play and the mute button go through imperative calls
+   * (the props stay as the initial state). */
+  const applyPlayback = useCallback(() => {
+    videoRef.current
+      ?.setStatusAsync({ shouldPlay: wantPlay, isMuted: muted, volume: muted ? 0 : 1 })
+      .catch(() => {}); // not loaded yet: onLoad applies it
+  }, [wantPlay, muted]);
+
+  useEffect(() => { applyPlayback(); }, [applyPlayback]);
+  // A page that scrolls off restarts from the beginning next time it is reached.
+  useEffect(() => { if (!active) videoRef.current?.setPositionAsync(0).catch(() => {}); }, [active]);
+
   const onStatus = (status: AVPlaybackStatus) => {
-    if (status.isLoaded && status.durationMillis) setProgress(status.positionMillis / status.durationMillis);
+    if (!status.isLoaded) return;
+    if (status.durationMillis) setProgress(status.positionMillis / status.durationMillis);
+    // Self-heal if the player ever drifts from what the screen wants.
+    if (status.isMuted !== muted || status.shouldPlay !== wantPlay) applyPlayback();
   };
 
   const share = () => {
@@ -93,9 +113,11 @@ function VideoPage({ item, height, active, muted, onToggleMute }: {
             style={{ width: SCREEN_WIDTH, height }}
             videoStyle={{ width: '100%', height: '100%' }}
             resizeMode={ResizeMode.CONTAIN}
-            shouldPlay={active && !paused}
+            shouldPlay={wantPlay}
             isLooping
             isMuted={muted}
+            volume={muted ? 0 : 1}
+            onLoad={applyPlayback}
             onPlaybackStatusUpdate={onStatus}
             onError={() => setFailed(true)}
             posterSource={item.imgUrl ? { uri: item.imgUrl } : undefined}
@@ -244,7 +266,7 @@ export default function VideoFeedScreen() {
           showsVerticalScrollIndicator={false}
           getItemLayout={(_, index) => ({ length: pageHeight, offset: pageHeight * index, index })}
           onViewableItemsChanged={onViewable}
-          viewabilityConfig={{ itemVisiblePercentThreshold: 70 }}
+          viewabilityConfig={VIEWABILITY}
           windowSize={3}
           maxToRenderPerBatch={2}
           initialNumToRender={1}
