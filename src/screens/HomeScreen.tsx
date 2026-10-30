@@ -99,25 +99,30 @@ export default function HomeScreen() {
       >
         {/* Header: wordmark left, search + alerts right */}
         <View style={[styles.header, { paddingTop: insets.top + 10, backgroundColor: NAVY_CHROME, borderBottomColor: 'rgba(255,255,255,0.12)' }]}>
-          <Wordmark colors={colors} />
-          <View style={styles.headerActions}>
-            <TouchableOpacity
-              style={[styles.iconBtn, { backgroundColor: 'rgba(255,255,255,0.12)', borderColor: 'rgba(255,255,255,0.18)' }]}
-              onPress={() => setSearchOpen(true)}
-              accessibilityLabel="Search"
-              activeOpacity={0.8}
-            >
-              <MaterialIcons name="search" size={22} color="#fff" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.iconBtn, { backgroundColor: 'rgba(255,255,255,0.12)', borderColor: 'rgba(255,255,255,0.18)' }]}
-              onPress={() => setBellOpen(true)}
-              accessibilityLabel="Notifications"
-              activeOpacity={0.8}
-            >
-              <MaterialIcons name="notifications-none" size={22} color="#fff" />
-              <View style={[styles.badgeDot, { backgroundColor: colors.primary, borderColor: NAVY }]} />
-            </TouchableOpacity>
+          {/* One explicit row: wordmark on the left, search + bell on the right, centred on the same line */}
+          <View style={styles.headerRow}>
+            <View style={{ flexShrink: 1 }}>
+              <Wordmark colors={colors} />
+            </View>
+            <View style={styles.headerActions}>
+              <TouchableOpacity
+                style={[styles.iconBtn, { backgroundColor: 'rgba(255,255,255,0.12)', borderColor: 'rgba(255,255,255,0.18)' }]}
+                onPress={() => setSearchOpen(true)}
+                accessibilityLabel="Search"
+                activeOpacity={0.8}
+              >
+                <MaterialIcons name="search" size={22} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.iconBtn, { backgroundColor: 'rgba(255,255,255,0.12)', borderColor: 'rgba(255,255,255,0.18)' }]}
+                onPress={() => setBellOpen(true)}
+                accessibilityLabel="Notifications"
+                activeOpacity={0.8}
+              >
+                <MaterialIcons name="notifications-none" size={22} color="#fff" />
+                <View style={[styles.badgeDot, { backgroundColor: colors.primary, borderColor: NAVY }]} />
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
@@ -168,18 +173,34 @@ export default function HomeScreen() {
           if (list.length === 0) return null;
           return (
             <View key={category.label} style={styles.block}>
-              <BlockTitle
-                title={category.label}
-                color={category.color}
-                textColor={colors.primaryText}
-                actionLabel="See all"
-                onAction={() => navigation.navigate('SectionDetail', { section: category.section })}
-              />
-              {list.slice(0, ROW_STORIES).map((article, i) => (
-                <View key={article.id} style={[styles.rowDivider, { borderBottomColor: colors.divider }]}>
-                  <ArticleRow article={article} index={i} />
+              {/* Banner, stories and "See all" live in one card so the section reads as a single unit */}
+              <View style={[styles.categoryCard, { borderColor: colors.divider, backgroundColor: colors.surface }]}>
+                <BlockTitle
+                  flush
+                  title={category.label}
+                  color={category.color}
+                  textColor={colors.primaryText}
+                  actionLabel="See all"
+                  onAction={() => navigation.navigate('SectionDetail', { section: category.section })}
+                />
+                <View style={styles.categoryRows}>
+                  {list.slice(0, ROW_STORIES).map((article, i) => (
+                    <View key={article.id} style={[styles.rowDivider, { borderBottomColor: colors.divider }]}>
+                      <ArticleRow article={article} index={i} />
+                    </View>
+                  ))}
                 </View>
-              ))}
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('SectionDetail', { section: category.section })}
+                  style={[styles.categoryFooter, { borderTopColor: colors.divider }]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`See all ${category.label} stories`}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.categoryFooterText, { color: category.color }]}>See all {category.label} stories</Text>
+                  <MaterialIcons name="arrow-forward" size={16} color={category.color} />
+                </TouchableOpacity>
+              </View>
             </View>
           );
         })}
@@ -241,11 +262,13 @@ export default function HomeScreen() {
 }
 
 /** Navy banner that heads each block, with a coloured category tab on its left. */
-function BlockTitle({ title, color, actionLabel, onAction }: {
+function BlockTitle({ title, color, actionLabel, onAction, flush }: {
   title: string; color: string; textColor?: string; actionLabel?: string; onAction?: () => void;
+  /** Sits flush at the top of a card: no gap below and square corners (the card clips them). */
+  flush?: boolean;
 }) {
   return (
-    <View style={styles.blockBanner}>
+    <View style={[styles.blockBanner, flush && styles.blockBannerFlush]}>
       <View style={[styles.blockAccent, { backgroundColor: color }]} />
       <Text style={styles.blockTitle}>{title}</Text>
       {actionLabel ? (
@@ -258,16 +281,14 @@ function BlockTitle({ title, color, actionLabel, onAction }: {
 }
 
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingBottom: 12, borderBottomWidth: StyleSheet.hairlineWidth,
-  },
+  header: { paddingHorizontal: 20, paddingBottom: 12, borderBottomWidth: StyleSheet.hairlineWidth },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' },
   wordmark: { fontFamily: 'BebasNeue_400Regular', fontSize: 30, letterSpacing: 5, lineHeight: 32 },
   wordmarkSub: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 1 },
   wordmarkRule: { width: 16, height: 2 },
   wordmarkTag: { fontSize: 13, fontStyle: 'italic', fontWeight: '500', letterSpacing: 0.5 },
   liveDot: { width: 6, height: 6, borderRadius: 3 },
-  headerActions: { flexDirection: 'row', gap: 10 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 0 },
   iconBtn: {
     width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,
@@ -278,6 +299,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10,
     backgroundColor: NAVY, borderRadius: 14, paddingVertical: 12, paddingRight: 16, overflow: 'hidden',
   },
+  blockBannerFlush: { marginBottom: 0, borderRadius: 0 },
+  categoryCard: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
+  categoryRows: { paddingHorizontal: 8, paddingVertical: 6 },
+  categoryFooter: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    paddingVertical: 13, borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  categoryFooterText: { fontSize: 14, fontWeight: '800' },
   blockAccent: { width: 5, alignSelf: 'stretch', marginVertical: -12 },
   blockTitle: { flex: 1, color: '#fff', fontSize: 17, fontWeight: '800', letterSpacing: 0.2 },
   blockAction: { color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: '700' },
