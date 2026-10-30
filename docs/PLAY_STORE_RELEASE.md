@@ -47,6 +47,21 @@ To pull the release back before approval, use "Remove changes" on the Changes in
    `https://console.cloud.google.com/iam-admin/orgpolicies/iam-disableServiceAccountKeyCreation/edit?project=canada247-play`.
    (Status: pending, see to-do below.)
 
+## Over-the-air fix: blank tabs (2026-10-30)
+
+- **Symptom:** in the released 2.0.0 app, every tab except Home showed a blank white screen.
+- **Cause:** `ConcaveTabBar` combined a JS-driven `translateX` with a native-driven `scale` in
+  one transform. React Native threw "JS driven animation on animated node ... moved to native",
+  which took down the navigator. Fixed in `d84be37` by nesting the scale on its own view.
+- **Shipped as an OTA update** (JS only, no Play review): branch `production`, runtime `2.0.0`,
+  update group `6e038776-4bf0-448d-844e-cb998d262eb1`. Users get it on the second app launch
+  after it downloads. Still to confirm on a device.
+- **Publish an OTA update** (always pass the API URL: without it the bundle falls back to localhost):
+  `EXPO_PUBLIC_API_BASE_URL=https://ca.niveel.com/api/v1 npx eas-cli update --channel production --platform android --message "<what changed>"`
+  OTA only works for JavaScript changes and only for the same `version` (runtime 2.0.0).
+  Native changes (new packages, app.json, permissions) need a new store build.
+- `develop` and `master` were fast-forwarded to the same commit after the update.
+
 ## How to release the next version
 
 1. Bump `version` and `android.versionCode` in `app.json`. versionCode must be higher than
@@ -66,7 +81,7 @@ to an hour for the invite to activate and retry.
 ## To do
 
 - [ ] Re-enforce the Cloud organization policy on `canada247-play` (see above).
-- [ ] Wait for Google's review result, then install 2.0.0 from the Play Store and check it.
+- [ ] Confirm the tab fix on a device after the OTA update arrives (open the app twice, then switch tabs).
 - [ ] Decide whether `ENABLE_MANAGE_REGIONS` should match the backend (see
       `BACKEND_DEPENDENCIES.md`).
 - [ ] iOS release needs an Apple developer account.
