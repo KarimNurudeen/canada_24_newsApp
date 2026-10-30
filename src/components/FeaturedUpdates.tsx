@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, Image, StyleSheet } from 'react-native';
+import HorizontalScroller from './HorizontalScroller';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -39,7 +40,7 @@ export default function FeaturedUpdates({ categoryArticles }: { categoryArticles
           <MaterialIcons name="arrow-forward" size={15} color={colors.primary} />
         </TouchableOpacity>
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 14 }}>
+      <HorizontalScroller itemWidth={270} gap={14} padding={20}>
         {cards.map(({ label, color, article }) => (
           <TouchableOpacity
             key={label}
@@ -59,7 +60,7 @@ export default function FeaturedUpdates({ categoryArticles }: { categoryArticles
             </View>
           </TouchableOpacity>
         ))}
-      </ScrollView>
+      </HorizontalScroller>
     </View>
   );
 }

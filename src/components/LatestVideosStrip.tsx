@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, Image, StyleSheet } from 'react-native';
+import HorizontalScroller from './HorizontalScroller';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Radius } from '../theme';
 import { useApp } from '../context/AppContext';
@@ -30,7 +31,7 @@ export default function LatestVideosStrip({ onOpenVideos }: { onOpenVideos: () =
           <Text style={[styles.liveText, { color: colors.primary }]}>LIVE 24/7</Text>
         </TouchableOpacity>
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 12 }}>
+      <HorizontalScroller itemWidth={220} gap={12} padding={20}>
         {videos.map(video => (
           <TouchableOpacity key={video.id} activeOpacity={0.88} onPress={onOpenVideos} style={styles.card}>
             {video.imgUrl ? <Image source={{ uri: video.imgUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
@@ -47,7 +48,7 @@ export default function LatestVideosStrip({ onOpenVideos }: { onOpenVideos: () =
             <Text style={styles.videoTitle} numberOfLines={2}>{video.title}</Text>
           </TouchableOpacity>
         ))}
-      </ScrollView>
+      </HorizontalScroller>
     </View>
   );
 }

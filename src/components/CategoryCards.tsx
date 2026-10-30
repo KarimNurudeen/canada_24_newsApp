@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, Image, StyleSheet } from 'react-native';
 import { Video, ResizeMode } from 'expo-av';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Radius } from '../theme';
+import HorizontalScroller from './HorizontalScroller';
 import { useApp } from '../context/AppContext';
 import { NAV_CATEGORIES } from '../config/nav';
 import { fetchVideoFeed } from '../services/newsService';
@@ -50,8 +51,12 @@ export default function CategoryCards({ images, onOpenCategory, onOpenVideos }: 
 
   return (
     <View style={{ paddingTop: 8 }}>
-      <Text style={[styles.heading, { color: colors.primaryText }]}>Explore Categories</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+      <View style={styles.headingRow}>
+        <Text style={[styles.heading, { color: colors.primaryText }]}>Explore Categories</Text>
+        <Text style={[styles.swipeHint, { color: colors.hint }]}>Swipe</Text>
+        <MaterialIcons name="east" size={14} color={colors.hint} />
+      </View>
+      <HorizontalScroller itemWidth={CARD_WIDTH} gap={14} padding={20}>
         {cards.map(card => (
           <TouchableOpacity
             key={card.key}
@@ -95,14 +100,15 @@ export default function CategoryCards({ images, onOpenCategory, onOpenVideos }: 
             </View>
           </TouchableOpacity>
         ))}
-      </ScrollView>
+      </HorizontalScroller>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  heading: { fontSize: 20, fontWeight: '800', paddingHorizontal: 20, paddingBottom: 12 },
-  row: { paddingHorizontal: 20, gap: 14 },
+  headingRow: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 20, paddingBottom: 12 },
+  heading: { flex: 1, fontSize: 20, fontWeight: '800' },
+  swipeHint: { fontSize: 12, fontWeight: '600' },
   card: { width: CARD_WIDTH, borderWidth: StyleSheet.hairlineWidth, borderRadius: Radius.md, overflow: 'hidden' },
   imageWrap: { height: IMAGE_HEIGHT, width: '100%' },
   watchBadge: {
