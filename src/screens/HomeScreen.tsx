@@ -18,7 +18,6 @@ import BreakingTicker from '../components/BreakingTicker';
 import FeaturedUpdates from '../components/FeaturedUpdates';
 import ImmigrationByProvince from '../components/ImmigrationByProvince';
 import LatestVideosStrip from '../components/LatestVideosStrip';
-import AppFooter from '../components/AppFooter';
 import ArticleRow from '../components/ArticleRow';
 import SlideUpCard from '../components/SlideUpCard';
 import ArticleImage from '../components/ArticleImage';
@@ -248,7 +247,8 @@ export default function HomeScreen() {
           )}
         </View>
         <LatestVideosStrip onOpenVideos={() => (navigation as any).navigate('Watch')} />
-        <AppFooter />
+        {/* No footer on mobile: saved stories, alerts, feedback, About and the legal pages live in Settings */}
+        <View style={{ height: 28 }} />
       </ScrollView>
 
       <SearchModal visible={searchOpen} onClose={() => setSearchOpen(false)} />
