@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity, StyleSheet, Image, ActivityIndicator,
+  View, Text, FlatList, TouchableOpacity, Pressable, StyleSheet, Image, ActivityIndicator,
   Share, Linking, StatusBar, type ViewToken, type LayoutChangeEvent, Dimensions,
 } from 'react-native';
 import { Video, ResizeMode, type AVPlaybackStatus } from 'expo-av';
 import YoutubePlayer from 'react-native-youtube-iframe';
+import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -22,9 +23,56 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const VIEWABILITY = { itemVisiblePercentThreshold: 70 };
 type Tab = 'trending' | 'live';
 
+/**
+ * Runs inside the YouTube page that react-native-youtube-iframe loads.
+ * 1. The library posts play/pause/mute to `window`, but react-native-webview on Android delivers
+ *    messages to `document`, so every command was silently dropped (mute and autoplay never worked).
+ *    Forward them across.
+ * 2. The page pins the player to a 16:9 box; let it fill the whole view instead, so a portrait
+ *    view shows a Short edge to edge.
+ */
+const YT_INJECTED_JS = `
+(function () {
+  if (window.__rnBridge) return;
+  window.__rnBridge = true;
+  document.addEventListener('message', function (e) {
+    window.dispatchEvent(new MessageEvent('message', { data: e.data }));
+  });
+  var s = document.createElement('style');
+  s.textContent = 'html,body{height:100%;overflow:hidden;background:#000}' +
+    '.container{height:100% !important;padding-bottom:0 !important}';
+  document.head.appendChild(s);
+})();
+true;
+`;
+const YT_WEBVIEW_PROPS = { injectedJavaScript: YT_INJECTED_JS };
+const YT_PARAMS = { loop: true, controls: false, modestbranding: true, rel: false };
+
 function youtubeIdOf(url?: string): string | null {
-  const match = url?.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{6,})/);
+  const match = url?.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{6,})/);
   return match ? match[1] : null;
+}
+
+/** YouTube serves /shorts/<id> only for real Shorts; anything else redirects to /watch. */
+const shortsCache = new Map<string, boolean>();
+function useIsShort(ytId: string | null, enabled: boolean): boolean | null {
+  const [isShort, setIsShort] = useState<boolean | null>(ytId ? shortsCache.get(ytId) ?? null : null);
+  useEffect(() => {
+    if (!ytId || !enabled || isShort !== null) return;
+    let cancelled = false;
+    // If the check is slow, assume widescreen rather than leave the page empty.
+    const timer = setTimeout(() => { if (!cancelled) setIsShort(false); }, 2500);
+    fetch(`https://www.youtube.com/shorts/${ytId}`, { method: 'HEAD' })
+      .then(res => {
+        const short = res.url.includes('/shorts/');
+        shortsCache.set(ytId, short);
+        if (!cancelled) setIsShort(short);
+      })
+      .catch(() => { if (!cancelled) setIsShort(false); })
+      .finally(() => clearTimeout(timer));
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [ytId, enabled, isShort]);
+  return isShort;
 }
 
 function formatCount(n: number): string {
@@ -33,13 +81,21 @@ function formatCount(n: number): string {
   return String(n);
 }
 
-function RailButton({ icon, label, active, onPress }: {
+/** Round, dark-backed button so it stays visible over any picture. */
+function RailButton({ icon, label, active, onPress, accessibilityLabel }: {
   icon: keyof typeof MaterialIcons.glyphMap; label?: string; active?: boolean; onPress: () => void;
+  accessibilityLabel: string;
 }) {
   return (
-    <TouchableOpacity onPress={onPress} style={styles.railBtn} activeOpacity={0.8}>
-      <View style={styles.railIconWrap}>
-        <MaterialIcons name={icon} size={30} color={active ? '#FF3B5C' : '#fff'} style={styles.shadow} />
+    <TouchableOpacity
+      onPress={onPress}
+      style={styles.railBtn}
+      activeOpacity={0.8}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+    >
+      <View style={[styles.railIconWrap, active && styles.railIconActive]}>
+        <MaterialIcons name={icon} size={26} color="#fff" />
       </View>
       {label !== undefined ? <Text style={[styles.railLabel, styles.shadow]}>{label}</Text> : null}
     </TouchableOpacity>
@@ -59,6 +115,7 @@ function VideoPage({ item, height, active, muted, onToggleMute }: {
 
   const direct = item.videoUrl;
   const ytId = direct ? null : youtubeIdOf(item.sourceUrl);
+  const isShort = useIsShort(ytId, active);
 
   useEffect(() => { hydrateVideoInteractions(item); }, [item.id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!active) { setPaused(false); setProgress(0); } }, [active]);
@@ -68,9 +125,8 @@ function VideoPage({ item, height, active, muted, onToggleMute }: {
 
   const wantPlay = active && !paused;
 
-  /** Push play / mute straight to the player. expo-av does not reliably pick up prop changes
-   * after mount on Android, so scroll-to-play and the mute button go through imperative calls
-   * (the props stay as the initial state). */
+  /** Push play / mute straight to the direct-file player. expo-av does not reliably pick up prop
+   * changes after mount on Android, so scroll-to-play and mute go through imperative calls. */
   const applyPlayback = useCallback(() => {
     videoRef.current
       ?.setStatusAsync({ shouldPlay: wantPlay, isMuted: muted, volume: muted ? 0 : 1 })
@@ -92,27 +148,28 @@ function VideoPage({ item, height, active, muted, onToggleMute }: {
     void Share.share({ message: item.sourceUrl ? `${item.title}\n${item.sourceUrl}` : item.title });
   };
 
+  const playable = (direct && !failed) || ytId;
+
+  // Widescreen clips are scaled so the picture fills the full height and the sides are cropped,
+  // like TikTok / Shorts. Portrait Shorts already fit the screen exactly.
+  const wideW = (height * 16) / 9;
+
   return (
     <View style={{ height, width: '100%', backgroundColor: '#000' }}>
-      {/* Blurred backdrop so non-vertical video still fills the screen */}
+      {/* Poster shown until the player has loaded */}
       {item.imgUrl ? (
-        <Image source={{ uri: item.imgUrl }} style={StyleSheet.absoluteFillObject} blurRadius={30} resizeMode="cover" />
+        <Image source={{ uri: item.imgUrl }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
       ) : null}
-      <View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.45)' }]} />
 
-      {/* Player */}
-      <TouchableOpacity
-        activeOpacity={1}
-        style={styles.playerArea}
-        onPress={() => direct && setPaused(p => !p)}
-      >
+      {/* Player, edge to edge */}
+      <View style={StyleSheet.absoluteFill}>
         {direct && !failed ? (
           <Video
             ref={videoRef}
             source={{ uri: direct }}
             style={{ width: SCREEN_WIDTH, height }}
             videoStyle={{ width: '100%', height: '100%' }}
-            resizeMode={ResizeMode.CONTAIN}
+            resizeMode={ResizeMode.COVER}
             shouldPlay={wantPlay}
             isLooping
             isMuted={muted}
@@ -124,21 +181,29 @@ function VideoPage({ item, height, active, muted, onToggleMute }: {
             usePoster
           />
         ) : ytId ? (
-          active ? (
-            <YoutubePlayer
-              height={(SCREEN_WIDTH * 9) / 16}
-              width={SCREEN_WIDTH}
-              videoId={ytId}
-              play={!paused}
-              mute={muted}
-              initialPlayerParams={{ loop: true, controls: false, modestbranding: true, rel: false }}
-            />
-          ) : item.imgUrl ? (
-            <Image source={{ uri: item.imgUrl }} style={{ width: SCREEN_WIDTH, height: (SCREEN_WIDTH * 9) / 16 }} resizeMode="cover" />
+          active && isShort !== null ? (
+            <View
+              style={
+                isShort
+                  ? { width: SCREEN_WIDTH, height }
+                  : { position: 'absolute', top: 0, height, width: wideW, left: (SCREEN_WIDTH - wideW) / 2 }
+              }
+            >
+              <YoutubePlayer
+                height={height}
+                width={isShort ? SCREEN_WIDTH : wideW}
+                videoId={ytId}
+                play={!paused}
+                mute={muted}
+                initialPlayerParams={YT_PARAMS}
+                webViewProps={YT_WEBVIEW_PROPS}
+              />
+            </View>
+          ) : active ? (
+            <View style={styles.center}><ActivityIndicator color="#fff" /></View>
           ) : null
         ) : (
           <View style={styles.noPlayer}>
-            {item.imgUrl ? <Image source={{ uri: item.imgUrl }} style={styles.fill} resizeMode="contain" /> : null}
             {item.sourceUrl ? (
               <TouchableOpacity
                 style={styles.playBtn}
@@ -150,29 +215,30 @@ function VideoPage({ item, height, active, muted, onToggleMute }: {
             ) : null}
           </View>
         )}
-
-        {direct && paused ? (
-          <View style={styles.pauseOverlay} pointerEvents="none">
-            <MaterialIcons name="play-arrow" size={84} color="rgba(255,255,255,0.85)" />
-          </View>
-        ) : null}
-      </TouchableOpacity>
-
-      {/* Right action rail */}
-      <View style={styles.rail}>
-        <RailButton
-          icon="repeat"
-          label={formatCount(repostCount)}
-          active={reposted}
-          onPress={() => requireAuth(user, navigation, () => toggleRepost(item.id, reposted))}
-        />
-        <RailButton icon="share" label="Share" onPress={share} />
-        {direct || ytId ? (
-          <RailButton icon={muted ? 'volume-off' : 'volume-up'} onPress={onToggleMute} />
-        ) : null}
       </View>
 
-      {/* Bottom caption */}
+      {/* Transparent tap layer over the player: tap to pause/resume, and the WebView can no longer
+          swallow the vertical swipe that moves to the next video. */}
+      {playable ? (
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={() => setPaused(p => !p)}
+          accessibilityLabel={paused ? 'Play video' : 'Pause video'}
+        />
+      ) : null}
+
+      {playable && paused ? (
+        <View style={styles.pauseOverlay} pointerEvents="none">
+          <MaterialIcons name="play-arrow" size={84} color="rgba(255,255,255,0.85)" />
+        </View>
+      ) : null}
+
+      {/* Caption: a small scrim along the bottom keeps the text readable over any picture */}
+      <LinearGradient
+        colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.78)']}
+        style={styles.scrim}
+        pointerEvents="none"
+      />
       <View style={styles.caption} pointerEvents="none">
         {item.isLive ? (
           <View style={[styles.livePill, { alignSelf: 'flex-start', marginBottom: 8 }]}>
@@ -184,6 +250,27 @@ function VideoPage({ item, height, active, muted, onToggleMute }: {
           <Text style={[styles.desc, styles.shadow]} numberOfLines={2}>{item.description}</Text>
         ) : null}
         <Text style={[styles.date, styles.shadow]}>{item.date}</Text>
+      </View>
+
+      {/* Right action rail: repost, share, sound */}
+      <View style={styles.rail}>
+        <RailButton
+          icon="repeat"
+          label={formatCount(repostCount)}
+          active={reposted}
+          accessibilityLabel={reposted ? 'Remove repost' : 'Repost'}
+          onPress={() => requireAuth(user, navigation, () => toggleRepost(item.id, reposted))}
+        />
+        <RailButton icon="share" label="Share" accessibilityLabel="Share video" onPress={share} />
+        {direct || ytId ? (
+          <RailButton
+            icon={muted ? 'volume-off' : 'volume-up'}
+            label={muted ? 'Muted' : 'Sound'}
+            active={muted}
+            accessibilityLabel={muted ? 'Unmute' : 'Mute'}
+            onPress={onToggleMute}
+          />
+        ) : null}
       </View>
 
       {direct ? (
@@ -308,8 +395,6 @@ const styles = StyleSheet.create({
   emptyText: { color: 'rgba(255,255,255,0.8)', fontSize: 16, fontWeight: '700' },
   retry: { paddingHorizontal: 22, paddingVertical: 10, borderRadius: 999 },
   retryText: { color: '#fff', fontWeight: '800' },
-  fill: { width: '100%', height: '100%' },
-  playerArea: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   pauseOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   noPlayer: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   playBtn: {
@@ -324,11 +409,16 @@ const styles = StyleSheet.create({
   topTab: { alignItems: 'center', paddingVertical: 6 },
   topTabText: { color: '#fff', fontSize: 17, fontWeight: '800' },
   topTabUnderline: { marginTop: 4, width: 26, height: 3, borderRadius: 2, backgroundColor: '#fff' },
-  rail: { position: 'absolute', right: 10, bottom: 70, alignItems: 'center', gap: 18 },
+  rail: { position: 'absolute', right: 10, bottom: 56, alignItems: 'center', gap: 16 },
   railBtn: { alignItems: 'center' },
-  railIconWrap: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
-  railLabel: { color: '#fff', fontSize: 12, fontWeight: '700', marginTop: -2 },
-  caption: { position: 'absolute', left: 14, right: 84, bottom: 26 },
+  railIconWrap: {
+    width: 50, height: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)',
+  },
+  railIconActive: { backgroundColor: '#FF3B5C', borderColor: '#FF3B5C' },
+  railLabel: { color: '#fff', fontSize: 12, fontWeight: '700', marginTop: 4 },
+  scrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 190 },
+  caption: { position: 'absolute', left: 14, right: 84, bottom: 22 },
   title: { color: '#fff', fontSize: 15, fontWeight: '700', lineHeight: 20 },
   desc: { color: 'rgba(255,255,255,0.85)', fontSize: 13, marginTop: 4, lineHeight: 18 },
   date: { color: 'rgba(255,255,255,0.65)', fontSize: 12, marginTop: 6, fontWeight: '600' },
