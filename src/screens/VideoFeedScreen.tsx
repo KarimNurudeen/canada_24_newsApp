@@ -148,8 +148,6 @@ function VideoPage({ item, height, active, muted, onToggleMute }: {
     void Share.share({ message: item.sourceUrl ? `${item.title}\n${item.sourceUrl}` : item.title });
   };
 
-  const playable = (direct && !failed) || ytId;
-
   // Widescreen clips are scaled so the picture fills the full height and the sides are cropped,
   // like TikTok / Shorts. Portrait Shorts already fit the screen exactly.
   const wideW = (height * 16) / 9;
@@ -193,7 +191,8 @@ function VideoPage({ item, height, active, muted, onToggleMute }: {
                 height={height}
                 width={isShort ? SCREEN_WIDTH : wideW}
                 videoId={ytId}
-                play={!paused}
+                // No autoplay: the video waits on YouTube's own play button and starts when tapped.
+                play={false}
                 mute={muted}
                 initialPlayerParams={YT_PARAMS}
                 webViewProps={YT_WEBVIEW_PROPS}
@@ -217,9 +216,9 @@ function VideoPage({ item, height, active, muted, onToggleMute }: {
         )}
       </View>
 
-      {/* Transparent tap layer over the player: tap to pause/resume, and the WebView can no longer
-          swallow the vertical swipe that moves to the next video. */}
-      {playable ? (
+      {/* Direct video files have no controls of their own, so tap to pause/resume. YouTube videos
+          keep YouTube's play button and must receive the taps themselves, so no layer sits on them. */}
+      {direct && !failed ? (
         <Pressable
           style={StyleSheet.absoluteFill}
           onPress={() => setPaused(p => !p)}
@@ -227,10 +226,19 @@ function VideoPage({ item, height, active, muted, onToggleMute }: {
         />
       ) : null}
 
-      {playable && paused ? (
+      {direct && !failed && paused ? (
         <View style={styles.pauseOverlay} pointerEvents="none">
           <MaterialIcons name="play-arrow" size={84} color="rgba(255,255,255,0.85)" />
         </View>
+      ) : null}
+
+      {/* Over a YouTube video the WebView takes the touches, so leave two transparent strips that
+          pass vertical swipes to the pager: the left edge and the caption area. */}
+      {ytId ? (
+        <>
+          <View style={styles.swipeLeft} />
+          <View style={styles.swipeBottom} />
+        </>
       ) : null}
 
       {/* Caption: a small scrim along the bottom keeps the text readable over any picture */}
@@ -417,6 +425,8 @@ const styles = StyleSheet.create({
   },
   railIconActive: { backgroundColor: '#FF3B5C', borderColor: '#FF3B5C' },
   railLabel: { color: '#fff', fontSize: 12, fontWeight: '700', marginTop: 4 },
+  swipeLeft: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 36 },
+  swipeBottom: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 150 },
   scrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 190 },
   caption: { position: 'absolute', left: 14, right: 84, bottom: 22 },
   title: { color: '#fff', fontSize: 15, fontWeight: '700', lineHeight: 20 },

@@ -95,7 +95,13 @@ To pull the release back before approval, use "Remove changes" on the Changes in
   `youtube.com/shorts/<id>`, cached) fill the screen; widescreen clips are scaled to full
   height and centre-cropped. To letterbox widescreen clips instead of cropping, change the
   non-Short branch in `VideoPage` to use `width: SCREEN_WIDTH` like the Short branch.
-- Tap layer toggles pause; repost/share/sound buttons have dark round backgrounds and labels.
+- Repost/share/sound buttons have dark round backgrounds and labels.
+- **Follow-up (same day):** autoplay was dropped. A full-screen tap layer on top of the YouTube
+  player swallowed taps meant for YouTube's own play button and drew a second play icon, so
+  nothing played. YouTube videos now start paused (`play={false}`) and the user taps YouTube's
+  play button; there is no overlay on them, only two transparent swipe-through strips (left edge
+  and caption area) so the pager can still be swiped. The tap-to-pause layer remains for direct
+  video files only. Mute still works through the bridge.
 - Update group `dba84fd0-1623-4556-b547-094800b8b4c9`, runtime `2.0.0`, commit `2a8c6ee`.
 - Not verifiable off-device: autoplay without a gesture (desktop Chromium blocks it; Android
   WebView with `mediaPlaybackRequiresUserAction={false}` should allow it). If videos still do
