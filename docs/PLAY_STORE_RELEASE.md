@@ -62,6 +62,15 @@ To pull the release back before approval, use "Remove changes" on the Changes in
   Native changes (new packages, app.json, permissions) need a new store build.
 - `develop` and `master` were fast-forwarded to the same commit after the update.
 
+## OTA update: UI polish (2026-10-30)
+
+- Taller comment box that stays above the keyboard on Android; swipe cues (arrows, dots,
+  hints) on Trending, Explore Categories, Featured Updates and Latest Videos; breaking
+  news card with a "Read the story" button; each home category grouped in one card;
+  header row locked (wordmark left, search + bell right).
+- Update group `658ef754-9795-471d-8f84-54c76c24a434` on branch `production`, runtime `2.0.0`
+  (commit `95a9675`). To verify on a phone: open the app twice, then check the comment box.
+
 ## How to release the next version
 
 1. Bump `version` and `android.versionCode` in `app.json`. versionCode must be higher than
