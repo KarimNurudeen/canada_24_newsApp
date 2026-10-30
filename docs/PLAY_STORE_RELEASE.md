@@ -71,6 +71,18 @@ To pull the release back before approval, use "Remove changes" on the Changes in
 - Update group `658ef754-9795-471d-8f84-54c76c24a434` on branch `production`, runtime `2.0.0`
   (commit `95a9675`). To verify on a phone: open the app twice, then check the comment box.
 
+## OTA update: video mute/autoplay, no mobile footer (2026-10-30)
+
+- Watch feed: mute and play are now pushed to expo-av imperatively (`setStatusAsync`), because
+  prop-only updates were not reliably applied on Android (mute icon toggled but sound kept
+  playing). A page scrolling into view now starts playing and rewinds when it leaves.
+  JS only: expo-av is already in the 2.0.0 binary, so no store build was needed.
+- Removed the web-style footer from Home. Saved stories, alerts, feedback, About and the legal
+  pages are in Settings. `AppFooter.tsx` was deleted (its deletion sits in commit
+  "Fix video mute and make videos start when scrolled into view").
+- Update group `445d7f09-8d4e-45d0-8d3f-5e6d34fd69f8`, runtime `2.0.0`, commit `c97edf5`.
+  Still to confirm on a device: mute silences the video, and videos autoplay on scroll.
+
 ## How to release the next version
 
 1. Bump `version` and `android.versionCode` in `app.json`. versionCode must be higher than
