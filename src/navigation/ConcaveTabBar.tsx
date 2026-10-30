@@ -90,10 +90,13 @@ export default function ConcaveTabBar({ state, descriptors, navigation }: Bottom
       </Svg>
 
       {/* Glass water-drop bubble that carries the active icon */}
+      {/* The slide (JS-driven, the scoop path follows it) and the pop scale (native-driven)
+          sit on separate nodes: RN throws if one transform mixes the two drivers. */}
       <Animated.View
         pointerEvents="none"
-        style={[styles.bubbleWrap, { transform: [{ translateX: bubbleX }, { scale: pop }] }]}
+        style={[styles.bubbleWrap, { transform: [{ translateX: bubbleX }] }]}
       >
+      <Animated.View style={{ width: BUBBLE, height: BUBBLE, transform: [{ scale: pop }] }}>
         <Animated.View style={[styles.ripple, { opacity: rippleOpacity, transform: [{ scale: rippleScale }] }]} />
         <View style={styles.bubble}>
           <BlurView intensity={55} tint="light" experimentalBlurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
@@ -109,6 +112,7 @@ export default function ConcaveTabBar({ state, descriptors, navigation }: Bottom
             {activeDescriptor.options.tabBarIcon?.({ focused: true, color: ICON, size: 26 })}
           </View>
         </View>
+      </Animated.View>
       </Animated.View>
 
       {/* Tabs */}
