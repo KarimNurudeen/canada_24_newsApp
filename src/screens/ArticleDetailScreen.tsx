@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
   StyleSheet, Image, Share, Animated, Modal,
-  TextInput, KeyboardAvoidingView, Platform,
+  TextInput, KeyboardAvoidingView, Keyboard,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, type RouteProp, type NavigationProp } from '@react-navigation/native';
@@ -131,6 +131,10 @@ export default function ArticleDetailScreen() {
   const [likers, setLikers] = useState<{ count: number; likers: Liker[] }>({ count: 0, likers: [] });
   const [likersOpen, setLikersOpen] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+  // Where the comment box sits inside the scroll content, so it can be scrolled above the keyboard.
+  const commentsY = useRef(0);
+  const inputRowY = useRef(0);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
   const soundRef = useRef<Audio.Sound | null>(null);
   // Related coverage is enriched in the background on the server, so refetch while it is PENDING.
   const [fresh, setFresh] = useState<{ related?: typeof article.relatedCoverage; status?: string; readTime?: number; audioUrl?: string | null; audioStatus?: string }>({});
@@ -256,6 +260,19 @@ export default function ArticleDetailScreen() {
     await Clipboard.setStringAsync(article.sourceUrl ?? article.headline);
   };
 
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardOpen(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardOpen(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
+
+  /** Bring the comment box clear of the keyboard once it has finished opening. */
+  const revealCommentInput = () => {
+    setTimeout(() => {
+      scrollRef.current?.scrollTo({ y: Math.max(0, commentsY.current + inputRowY.current - 90), animated: true });
+    }, 280);
+  };
+
   const handleSubmitComment = () => {
     if (!commentText.trim()) return;
     requireAuth(user, navigation, () => {
@@ -277,8 +294,14 @@ export default function ArticleDetailScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['bottom', 'left', 'right']}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView ref={scrollRef} contentContainerStyle={{ paddingBottom: isSpeaking ? 120 : 48 }}>
+      {/* 'padding' on Android too: the app is edge-to-edge, so the OS no longer resizes the
+          window for the keyboard and it would cover the comment box. */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+        <ScrollView
+          ref={scrollRef}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingBottom: (isSpeaking ? 120 : 48) + (keyboardOpen ? 260 : 0) }}
+        >
           {/* Hero image with overlaid header + headline */}
           <View style={{ height: 470 }}>
             {article.imgUrl ? (
@@ -455,10 +478,13 @@ export default function ArticleDetailScreen() {
           ) : null}
 
           {/* Comments */}
-          <View style={[styles.commentsSection, { backgroundColor: colors.surface }]}>
+          <View
+            style={[styles.commentsSection, { backgroundColor: colors.surface }]}
+            onLayout={e => { commentsY.current = e.nativeEvent.layout.y; }}
+          >
             <Text style={[styles.commentsTitle, { color: colors.primaryText }]}>Comments ({commentCount})</Text>
 
-            <View style={styles.commentInputRow}>
+            <View style={styles.commentInputRow} onLayout={e => { inputRowY.current = e.nativeEvent.layout.y; }}>
               <UserAvatar uri={user?.avatar} name={user?.displayName} size={32} />
               <TextInput
                 style={[styles.commentInput, { color: colors.primaryText, backgroundColor: colors.background }]}
@@ -467,7 +493,11 @@ export default function ArticleDetailScreen() {
                 value={commentText}
                 onChangeText={setCommentText}
                 multiline
-                onFocus={() => { if (!user) requireAuth(user, navigation, () => {}); }}
+                textAlignVertical="top"
+                onFocus={() => {
+                  if (!user) { requireAuth(user, navigation, () => {}); return; }
+                  revealCommentInput();
+                }}
               />
               <TouchableOpacity
                 style={[styles.commentSendBtn, { backgroundColor: commentText.trim() ? colors.primary : colors.divider }]}
@@ -625,7 +655,7 @@ const styles = StyleSheet.create({
   commentAvatarText: { color: '#fff', fontSize: 13, fontWeight: '900' },
   commentInput: {
     flex: 1, borderRadius: Radius.md, paddingHorizontal: 14, paddingVertical: 10,
-    fontSize: 14, fontWeight: '500', minHeight: 44, maxHeight: 120, lineHeight: 20,
+    fontSize: 14, fontWeight: '500', minHeight: 92, maxHeight: 180, lineHeight: 20,
   },
   commentSendBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   noComments: { alignItems: 'center', justifyContent: 'center', paddingVertical: 32 },
